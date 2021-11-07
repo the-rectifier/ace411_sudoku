@@ -1,57 +1,41 @@
-use sudoku::Sudoku;
-use std::str;
 
+use std::io;
+use serialport::available_ports;
 
-pub fn display_sudoku(line: &str) {
-    println!();
-    for (i, c) in line.chars().enumerate() { 
-        print!("|");
-        if c == '.' {
-            print!("  _  ");
-        } else {
-            print!("  {}  ", c);
-        }
-        if ((i+1) % 3 == 0) && (i+1) % 9 != 0 {
-            print!("|");
-        } else if (i+1) % 9 == 0 && (i+1) % 27 != 0 {
-            println!("|");
-        } else if (i+1) % 27 == 0 && (i+1) != 81 {
-            println!("|\n=========================================================")
-        } else if (i+1) == 81 { 
-            println!("|");
-        }
+mod sudoku_lib;
+
+fn get_ports() { 
+    let ports = available_ports().expect("No ports found!");
+    for (i, p) in ports.iter().enumerate() {
+        println!("[*] Found Port ({}): {}", i, p.port_name);
     }
 }
 
+fn grab_input() -> (usize, usize, u8) {
+    let mut string = String::new();
+    io::stdin().read_line(&mut string).expect("Error reading string");
 
-fn get_tx_bytes(sudoku: &[u8; 81], sol: &[u8; 81]) -> Vec<u8> {
-    let mut tx_bytes = Vec::new();
-    for i in 0..=80 {
-        if sudoku[i] == sol[i] {
-            continue;
-        } else {
-            tx_bytes.push(sol[i]);
-        }
-    }
-    return tx_bytes;
+    
+    let inputs: Vec<u8> = string.trim().split(' ')
+    .map(|x| x.parse().expect("Not an integer!"))
+    .collect();
+
+    return (inputs[0] as usize -1, inputs[1] as usize -1, inputs[2]);
 }
-
 
 fn main() {
-    let sudoku = Sudoku::generate_unique();
-    let sudoku_bytes = sudoku.to_bytes();
-    let solution_bytes: [u8; 81];
+    let mut sudoku = sudoku_lib::create_board();
+    // uart::get_ports();
+    let mut tup: (usize, usize, u8);
+    println!("UnSolved:");
+    sudoku.print_unsolved();
 
-    display_sudoku(&sudoku.to_str_line());
+    loop {
+        tup = grab_input();
+        sudoku.solve_cell(tup);
+    }
 
-    let solution = sudoku.solve_unique().unwrap();
-    solution_bytes = solution.to_bytes();
-
-
-    let solution_string = format!("{}", solution);
-    display_sudoku(&solution_string.as_str());
-
-    let tx_bytes = get_tx_bytes(&sudoku_bytes, &solution_bytes);
-    println!("{:?}", tx_bytes);
+    
+    
 
 }
