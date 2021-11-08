@@ -11,7 +11,7 @@ pub struct SudokuAvr {
 }
 
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Cell {
     value: u8,
     orig: bool,
@@ -19,11 +19,7 @@ struct Cell {
 
 impl SudokuAvr {
     pub fn solve_board(&mut self) { 
-        for i in 0..self.board.len() {
-            for j in 0..self.board[i].len() {
-                self.board[i][j].value = self.solution[i][j].value;
-            }
-        }
+        self.board = self.solution.clone();
     }
 
     pub fn solve_cell(&mut self, tup: ( usize, usize, u8 )) {
