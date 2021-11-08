@@ -1,5 +1,6 @@
-use sudoku::Sudoku;
 use colored::*;
+use log::{ error };
+use sudoku::Sudoku;
 
 #[derive(Default)]
 pub struct SudokuAvr {
@@ -25,7 +26,7 @@ impl SudokuAvr {
         }
     }
 
-    pub fn solve_cell(&mut self, tup: ( usize, usize, u8 )) -> bool {
+    pub fn solve_cell(&mut self, tup: ( usize, usize, u8 )) {
         let i = tup.0;
         let j = tup.1;
         let num = tup.2;
@@ -33,16 +34,13 @@ impl SudokuAvr {
         if self.check_cell(i, j, num) {
             self.board[i][j].value = num;
             SudokuAvr::print_diff(&self.board, i, j);
-            return true;
-        } else {
-            return false;
         }
     }
 
     fn check_cell(&self, i: usize, j: usize, num: u8) -> bool {
         // check if original
         if self.board[i][j].orig {
-            println!("{}", "Cannot modify original Cell!".red());
+            error!("Cannot modify original Cell!");
             return false;
         }
 
@@ -53,11 +51,7 @@ impl SudokuAvr {
         for k in x..x+3 {
             for l in y..y+3 {
                 if self.board[k][l].value == num {
-                    let msg: String = format!("[{}] {} {}", 
-                            "x".red(),
-                            num, 
-                            "exists in the same Square!!".red());
-                println!("{}", msg);
+                error!("{} Exists in the same Square!!", num);
                 return false;
                 }
             }
@@ -66,11 +60,7 @@ impl SudokuAvr {
         // check line
         for k in 0..9 {
             if self.board[i][k].value == num {
-                let msg: String = format!("[{}] {} {}", 
-                            "x".red(),
-                            num, 
-                            "exists in the same Line!!".red());
-                println!("{}", msg);
+                error!("{} Exists in the same Line!!", num);
                 return false;
             }
         }
@@ -78,11 +68,7 @@ impl SudokuAvr {
         // check row
         for k in 0..9 {
             if self.board[k][j].value == num {
-                let msg: String = format!("[{}] {} {}", 
-                            "x".red(),
-                            num, 
-                            "exists in the same Row!!".red());
-                println!("{}", msg);
+                error!("{} Exists in the same Row!!", num);
                 return false;
             }
         }
@@ -149,6 +135,7 @@ impl SudokuAvr {
     }
 }
 
+
 fn parse_board(board: &mut [[Cell; 9]; 9], bytes: &[u8; 81]) {
     let mut byte = 0;
     for i in 0..board.len() {
@@ -159,6 +146,7 @@ fn parse_board(board: &mut [[Cell; 9]; 9], bytes: &[u8; 81]) {
         }
     }
 }
+
 
 pub fn create_board() -> SudokuAvr {
     let mut sudoku_avr = SudokuAvr::default();
