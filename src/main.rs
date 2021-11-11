@@ -1,12 +1,65 @@
-use serialport::{ available_ports, DataBits, StopBits };
+use serialport::{ available_ports, DataBits, StopBits, Parity };
 use std::io::{self, Write};
 use std::time::Duration;
+use std::thread;
 use anyhow::{ Context, Result, bail };
 use log::{ info, error };
 use simplelog::{ ColorChoice, TermLogger, TerminalMode };
+use colored::*;
+use structopt::StructOpt;
+use strum_macros::EnumString;
 
 mod sudoku_lib;
 
+#[derive(Debug, EnumString)]
+enum MyParity {
+    #[strum(ascii_case_insensitive)]
+    None,
+    #[strum(ascii_case_insensitive)]
+    Even,
+    #[strum(ascii_case_insensitive)]
+    Odd,
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(
+    name = "ACE411 - Sudoku <=> AVR Interface",
+    author = "Stavrou Odysseas (canopus)",
+)]
+struct Opts {
+    #[structopt(subcommand)]
+    cmd: Command,
+}
+
+#[derive(StructOpt, Debug)]
+enum Command {
+    #[structopt(name = "list")]
+    List,
+
+    #[structopt(name = "run")]
+    Run(Run),
+}
+
+#[derive(StructOpt, Debug)]
+struct Run {
+    #[structopt(long="dev", short="u", required_unless("ports"))]
+    dev: String,
+
+    #[structopt(long="difficulty", short="d")]
+    difficulty: sudoku_lib::Difficulty,
+
+    #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
+    sb: u32,
+
+    #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
+    db: u32,
+
+    #[structopt(long="parity", short="p", default_value="None")]
+    p: MyParity,
+
+    #[structopt(long="baud-rate", short="r")]
+    br: u32,
+}
 
 fn get_ports() { 
     let ports = available_ports().expect("No ports found!");
@@ -16,102 +69,39 @@ fn get_ports() {
 }
 
 
-fn grab_input() -> Result<(usize, usize, u8)> {
-    let mut temp_nums: [u8; 3] = Default::default();
-    let mut tup: (usize, usize, u8) = Default::default();
 
-    let mut string = String::new();
-    io::stdin().read_line(&mut string)
-                .with_context(|| format!("Failed to read line"))?;
-    
-    let inputs: Vec<&str> = string.trim().split(&[' ', ','][..]).collect();
+fn run(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
 
-    if inputs.len() == 1 {
-        match inputs.get(0) {
-            Some(&"s") | Some(&"S") => {return Ok((0, 0, 1));},
-            Some(&"q") | Some(&"Q") => {return Ok((0, 0, 2));},
-            _ => (),
-        };
-    }
+    let sudoku = sudoku_lib::SudokuAvr::new(&sudoku_lib::Difficulty::Hard);
 
-    if inputs.len() != 3 {
-        bail!("Incorrect number of parameters supplied!");
-    }
+    sudoku.print_unsolved();
+    sudoku.print_solved();
 
-    for (i, num) in inputs.iter().enumerate() {
-        let temp: u8 = num.parse::<u8>().with_context(|| format!("Not a valid number!"))?;
+    port.write(&[b'\x69'])?;
 
-        if temp > 9 || temp == 0 {
-            bail!("Number ouside valid range!!");
-        }
-        temp_nums[i] = temp;
-    }
-
-    tup.0 = temp_nums[0] as usize -1;
-    tup.1 = temp_nums[1] as usize -1;
-    tup.2 = temp_nums[2];
-
-    Ok(tup)
-}
-
-
-fn run() -> Result<()> {
-
-    let mut sudoku = sudoku_lib::create_board();
-    let mut string = String::new();
-
-    // get_ports();
-    println!("Welcome to .....");
-    println!("Keep in mind that anything you enter will be sent to the blah blah port");
-
-    loop {
-        sudoku.print_unsolved();
-        print_menu();
-
-        io::stdin().read_line(&mut string)
-                    .with_context(|| format!("Failed to read line"))?;
-        
-        match string.replace("\n", "").as_str() { 
-            "1" => game_mode(&mut sudoku),
-            "2" => sudoku.solve_board(),
-            "3" => {println!("Goodbyeeee!!");break;}
-            _ => error!("Invalid choice!"),
-        };
-        string.truncate(0);
-    }
     Ok(())
 }
 
-fn game_mode(sudoku: &mut sudoku_lib::SudokuAvr) {
-    print_gamemode();
-    loop {
-        print!("> ");
-        std::io::stdout().flush().expect("some error message");
 
-        match grab_input() {
-            Ok(tup) => {
-                if tup.0 == 0 && tup.1 == 0 && tup.2 == 1 {
-                    sudoku.solve_board();
-                    //TODO send solved board
-                    sudoku.print_solved();
-                } else if tup.0 == 0 && tup.1 == 0 && tup.2 == 2{
-                    break;
-                } else {
-                    sudoku.solve_cell(tup)
-                    //TODO send cell
-                }
-            },
-            Err(e) => {
-                error!("{:?}", e);
-                sudoku.print_unsolved();
-            },
-        };    
-    }
+fn open_port(dev: &str, baud: u32, sb: StopBits, db: DataBits, p: Parity) -> Result<Box<dyn serialport::SerialPort>> {
+    let builder = serialport::new(dev, baud)
+                            .stop_bits(sb)
+                            .data_bits(db)
+                            .parity(p);
+
+    let port = builder.open().with_context(|| format!("Unable to open port {}!", dev))?;
+
+    info!("{}", "Opened Port Successfully!!".green());
+
+    Ok(port)
 }
 
-
 fn main() -> Result<()> {
-    
+    let sb: StopBits;
+    let db: DataBits;
+    let p : Parity;
+    let br: u32;
+
     TermLogger::init(
         log::LevelFilter::Info,
         simplelog::Config::default(),
@@ -120,26 +110,42 @@ fn main() -> Result<()> {
     ).expect("Failed to init logger");
 
 
-    if let Err(e) = run() {
-        error!("{:?}", e);
-        std::process::exit(-1);
-    }
+    match Command::from_args() {
+        Command::List => {
+            get_ports();
+            return Ok(());
+            },
+        Command::Run(args) => {
+            br = args.br;
 
+            match args.sb {
+                1 => sb = StopBits::One,
+                2 => sb = StopBits::Two,
+                _ => bail!("Invalid Stop Bits"),
+            }
+
+            match args.db {
+                5 => db = DataBits::Five,
+                6 => db = DataBits::Six,
+                7 => db = DataBits::Seven,
+                8 => db = DataBits::Eight,
+                _ => bail!("Invalid Data Bits"),
+            }
+
+            match args.p {
+                MyParity::Even => p = Parity::Even,
+                MyParity::Odd => p = Parity::Odd,
+                MyParity::None => p = Parity::None,
+            }
+
+            let mut port = open_port(args.dev.as_str(), br, sb, db, p)?;
+
+            if let Err(e) = run(&mut port) {
+                error!("{:?}", e);
+                std::process::exit(-1);
+            }
+        }
+    }    
+    
     Ok(())
-}
-
-
-fn print_gamemode(){
-    println!("Welcome to the Game Mode!!");
-    println!("Enter Coordinates and Number separated with commas or spaces: [line, column Num]");
-    info!("Enter q/Q to go back to the Main Menu");
-    info!("Enter s/S to solve the whole board!");
-}
-
-
-fn print_menu() {
-    println!("=============Main Menu=============");
-    println!("1.) Enter Game Mode");
-    println!("2.) Solve Whole board");
-    println!("3.) Exit");
 }
