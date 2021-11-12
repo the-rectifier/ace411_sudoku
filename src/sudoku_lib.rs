@@ -1,8 +1,11 @@
 use colored::*;
 use log::{ info, error };
+use std::time::Duration;
+use std::thread;
 use sudoku::Sudoku;
 use rand::{thread_rng, Rng};
 use strum_macros::EnumString;
+use anyhow::{ Context, Result, bail };
 
 const EASY: u8 = 25;
 const MEDIUM: u8 = 30;
@@ -24,6 +27,8 @@ pub struct SudokuAvr {
     /* Holds the whole solved board */
     solution: [[Cell; 9]; 9],
 
+    filled: u8,
+
     dif: Difficulty,
 }
 
@@ -36,7 +41,7 @@ struct Cell {
 
 
 impl SudokuAvr {
-    pub fn new(diff: &Difficulty) -> Self {
+    pub fn new(diff: Difficulty) -> Self {
         let sudoku = Sudoku::generate_unique();
         let sudoku_bytes = sudoku.to_bytes();
         
@@ -48,6 +53,7 @@ impl SudokuAvr {
             board: SudokuAvr::parse_board(&sudoku_bytes),
             solution: SudokuAvr::parse_board(&solution),
             dif: diff.clone(),
+            filled: 0,
         };
 
         info!("Solving Board");
@@ -61,7 +67,21 @@ impl SudokuAvr {
             Difficulty::Hard => SudokuAvr::remove_cells(&mut board.board, HARD),
         };
 
+        board.filled = SudokuAvr::count_filled(&board.board);
         return board;
+    }
+
+    fn count_filled(board: &[[Cell; 9]; 9]) -> u8 {
+        let mut count: u8 = 0;
+        for i in 0..board.len() {
+            for j in 0..board[i].len() {
+                if board[i][j].value != 0 {
+                    count += 1;
+                } 
+            }
+        }
+
+        return count;
     }
 
     fn solve_board(sud: &mut SudokuAvr) {
@@ -155,6 +175,45 @@ impl SudokuAvr {
         }
 
         return board;
+    }
+
+    fn wait_for_response(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn send_board(&self, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+        info!("Will send {} chunks to AVR!", self.filled);
+
+        match port.write(&self.filled.to_ne_bytes()) {
+            Ok(_) => { 
+                info!("Finished Sending");
+                port.flush().unwrap();
+                thread::sleep(Duration::from_millis(2));
+                //TODO await OK response
+            }
+            Err(_) => { bail!("Unable to Write!"); }
+        }
+
+        for i in 0..self.board.len() {
+            for j in 0..self.board.len() {
+                if self.board[i][j].value == 0 {
+                    continue;
+                }
+                let chunk = &[i as u8, j as u8, self.board[i][j].value, b'\x0D', b'\x0A'];
+                
+                match port.write(chunk) {
+                    Ok(_) => { 
+                        info!("Wrote {:?} to {:?}", chunk, port.name().unwrap()); 
+                        port.flush().unwrap();
+                        thread::sleep(Duration::from_millis(2));
+                        //TODO await OK response
+                    }
+                    Err(_) => { bail!("Unable to Write!"); }
+                }       
+            }
+        }
+        info!("Done Sending!");
+        Ok(())
     }
 }
 

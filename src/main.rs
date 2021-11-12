@@ -1,7 +1,5 @@
 use serialport::{ available_ports, DataBits, StopBits, Parity };
 use std::io::{self, Write};
-use std::time::Duration;
-use std::thread;
 use anyhow::{ Context, Result, bail };
 use log::{ info, error };
 use simplelog::{ ColorChoice, TermLogger, TerminalMode };
@@ -70,14 +68,11 @@ fn get_ports() {
 
 
 
-fn run(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+fn run(dif: sudoku_lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+    let sudoku = sudoku_lib::SudokuAvr::new(dif);
 
-    let sudoku = sudoku_lib::SudokuAvr::new(&sudoku_lib::Difficulty::Hard);
-
-    sudoku.print_unsolved();
-    sudoku.print_solved();
-
-    port.write(&[b'\x69'])?;
+    info!("Sending Unsolved board to {:?}", port.name().unwrap());
+    sudoku.send_board(port)?;
 
     Ok(())
 }
@@ -140,7 +135,7 @@ fn main() -> Result<()> {
 
             let mut port = open_port(args.dev.as_str(), br, sb, db, p)?;
 
-            if let Err(e) = run(&mut port) {
+            if let Err(e) = run(args.difficulty, &mut port) {
                 error!("{:?}", e);
                 std::process::exit(-1);
             }
