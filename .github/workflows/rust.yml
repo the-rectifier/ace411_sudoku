@@ -16,8 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Add Windows Toolchain
-      run: rustup toolchain install stable-x86_64-pc-windows-gnu
+    - name: Install mingw-w64 Linker
+      run: sudo apt-get install mingw-w64
     - name: Add Windows Target
       run: rustup target add x86_64-pc-windows-gnu
     - name: Build Windows
