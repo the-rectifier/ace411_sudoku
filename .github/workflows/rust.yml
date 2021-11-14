@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install mingw-w64 Linker
-      run: sudo apt-get install mingw-w64
+      run: sudo apt-get install mingw-w64 libudev-dev pkg-config
     - name: Add Windows Target
       run: rustup target add x86_64-pc-windows-gnu
     - name: Build Windows
