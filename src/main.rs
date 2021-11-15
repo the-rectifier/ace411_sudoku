@@ -9,7 +9,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 use strum_macros::EnumString;
 
-mod sudoku_lib;
+mod lib;
 
 #[derive(Debug, EnumString)]
 enum MyParity {
@@ -38,7 +38,47 @@ enum Command {
 
     #[structopt(name = "run")]
     Run(Run),
+
+    #[structopt(name = "gen")]
+    Gen(Gen),
+
+    #[structopt(name = "prog")]
+    Prog(Prog),
 }
+
+#[derive(StructOpt, Debug)]
+struct Gen {
+    #[structopt(long = "difficulty", short = "d")]
+    difficulty: lib::Difficulty,
+
+    #[structopt(long = "directory", short = "p")]
+    directory: String,
+
+    #[structopt(long = "number", short = "n")]
+    number: u32,
+}
+
+#[derive(StructOpt, Debug)]
+struct Prog {
+    #[structopt(long = "dev", short = "u")]
+    dev: String,
+
+    #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
+    sb: u8,
+
+    #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
+    db: u8,
+
+    #[structopt(long = "parity", short = "p", default_value = "None")]
+    p: MyParity,
+
+    #[structopt(long = "baud-rate", short = "r")]
+    br: u32,
+
+    #[structopt(long = "board-file", short = "b")]
+    board: String,
+}
+
 
 #[derive(StructOpt, Debug)]
 struct Run {
@@ -46,13 +86,13 @@ struct Run {
     dev: String,
 
     #[structopt(long = "difficulty", short = "d")]
-    difficulty: sudoku_lib::Difficulty,
+    difficulty: lib::Difficulty,
 
     #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
-    sb: u32,
+    sb: u8,
 
     #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
-    db: u32,
+    db: u8,
 
     #[structopt(long = "parity", short = "p", default_value = "None")]
     p: MyParity,
@@ -64,6 +104,16 @@ struct Run {
     // timeout: u64,
 }
 
+
+struct PortConfig {
+    baud_rate: u32, 
+    stop_bits: StopBits,
+    data_bits: DataBits,
+    parity: Parity,
+    dev: String,
+}
+
+
 fn get_ports() {
     let ports = available_ports().expect("No ports found!");
     for (i, p) in ports.iter().enumerate() {
@@ -71,8 +121,8 @@ fn get_ports() {
     }
 }
 
-fn run(dif: sudoku_lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
-    let sudoku = sudoku_lib::SudokuAvr::new(dif);
+fn run(dif: lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+    let sudoku = lib::SudokuAvr::new(&dif);
 
     println!();
     info!("Generated Board!");
@@ -103,23 +153,16 @@ fn run(dif: sudoku_lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) 
     Ok(())
 }
 
-fn open_port(
-    dev: &str,
-    // timeout: u64,
-    baud: u32,
-    sb: StopBits,
-    db: DataBits,
-    p: Parity,
-) -> Result<Box<dyn serialport::SerialPort>> {
-    let builder = serialport::new(dev, baud)
-        .stop_bits(sb)
-        .data_bits(db)
+fn open_port(port_config: &PortConfig) -> Result<Box<dyn serialport::SerialPort>> {
+    let builder = serialport::new(port_config.dev.as_str(), port_config.baud_rate)
+        .stop_bits(port_config.stop_bits)
+        .data_bits(port_config.data_bits)
         // .timeout(Duration::from_millis(timeout))
-        .parity(p);
+        .parity(port_config.parity);
 
     let port = builder
         .open()
-        .with_context(|| format!("Unable to open port {}!", dev))?;
+        .with_context(|| format!("Unable to open port {}!", port_config.dev))?;
 
     info!("{}", "Opened Port Successfully!!".green());
 
@@ -127,11 +170,6 @@ fn open_port(
 }
 
 fn main() -> Result<()> {
-    let sb: StopBits;
-    let db: DataBits;
-    let p: Parity;
-    let br: u32;
-
     TermLogger::init(
         log::LevelFilter::Info,
         ConfigBuilder::new().set_time_to_local(true).build(),
@@ -146,36 +184,67 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Command::Run(args) => {
-            br = args.br;
+            let port_config = PortConfig {
+                baud_rate: args.br,
+                stop_bits: check_stop_bits(args.sb)?,
+                data_bits: check_data_bits(args.db)?,
+                parity: check_parity(args.p)?,
+                dev: args.dev,
+            };
 
-            match args.sb {
-                1 => sb = StopBits::One,
-                2 => sb = StopBits::Two,
-                _ => bail!("Invalid Stop Bits"),
-            }
-
-            match args.db {
-                5 => db = DataBits::Five,
-                6 => db = DataBits::Six,
-                7 => db = DataBits::Seven,
-                8 => db = DataBits::Eight,
-                _ => bail!("Invalid Data Bits"),
-            }
-
-            match args.p {
-                MyParity::Even => p = Parity::Even,
-                MyParity::Odd => p = Parity::Odd,
-                MyParity::None => p = Parity::None,
-            }
-
-            let mut port = open_port(args.dev.as_str(), br, sb, db, p)?;
+            let mut port = open_port(&port_config)?;
 
             if let Err(e) = run(args.difficulty, &mut port) {
                 error!("{:?}", e);
                 std::process::exit(-1);
             }
         }
+        Command::Prog(args) => {
+            let port_config = PortConfig {
+                baud_rate: args.br,
+                stop_bits: check_stop_bits(args.sb)?,
+                data_bits: check_data_bits(args.db)?,
+                parity: check_parity(args.p)?,
+                dev: args.dev,
+            };
+
+            let mut port = open_port(&port_config)?;
+
+
+        }
+        Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.difficulty, gen.number)?; }
     }
 
     Ok(())
+}
+
+
+
+
+
+fn check_stop_bits(sb: u8) -> Result<StopBits> {
+    match sb {
+        1 => Ok(StopBits::One),
+        2 => Ok(StopBits::Two),
+        _ => bail!("Invalid Stop Bits"),
+    }
+}
+
+
+fn check_data_bits(db: u8) -> Result<DataBits> {
+    match db {
+        5 => Ok(DataBits::Five),
+        6 => Ok(DataBits::Six),
+        7 => Ok(DataBits::Seven),
+        8 => Ok(DataBits::Eight),
+        _ => bail!("Invalid Data Bits"),
+    }
+}
+
+fn check_parity(parity: MyParity) -> Result<Parity> {
+    match parity {
+        MyParity::Even => Ok(Parity::Even),
+        MyParity::Odd => Ok(Parity::Odd),
+        MyParity::None => Ok(Parity::None),
+    }
 }

@@ -4,15 +4,22 @@ use log::{error, info};
 use rand::{thread_rng, Rng};
 use std::io::ErrorKind;
 use std::thread;
+use std::str::from_utf8;
 use std::time::Duration;
-use strum_macros::EnumString;
+use strum_macros::{ EnumString, Display };
 use sudoku::Sudoku;
+use std::path::{ PathBuf };
+use std::io::Write;
+use std::fs::{ self, File, OpenOptions };
+
 
 const EASY: u8 = 35;
 const MEDIUM: u8 = 40;
 const HARD: u8 = 45;
 
-#[derive(Debug, EnumString, Clone)]
+
+
+#[derive(Debug, EnumString, Clone, Display)]
 pub enum Difficulty {
     #[strum(ascii_case_insensitive)]
     Easy,
@@ -22,6 +29,7 @@ pub enum Difficulty {
     Hard,
 }
 
+// #[derive(Default)]
 pub struct SudokuAvr {
     /* Hold the generated board */
     board: [[Cell; 9]; 9],
@@ -40,7 +48,7 @@ struct Cell {
 }
 
 impl SudokuAvr {
-    pub fn new(diff: Difficulty) -> Self {
+    pub fn new(diff: &Difficulty) -> Self {
         let sudoku = Sudoku::generate_unique();
         let sudoku_bytes = sudoku.to_bytes();
 
@@ -68,6 +76,13 @@ impl SudokuAvr {
 
         board.filled = SudokuAvr::count_filled(&board.board);
         return board;
+    }
+
+    pub fn new_from_str(line: &str) {
+        info!("Generating Board");
+
+        let board = SudokuAvr::parse_board(line.as_bytes());
+
     }
 
     fn count_filled(board: &[[Cell; 9]; 9]) -> u8 {
@@ -161,7 +176,7 @@ impl SudokuAvr {
         println!("\t🤘| 1 2 3 | 4 5 6 | 7 8 9 |\n");
     }
 
-    fn parse_board(bytes: &[u8; 81]) -> [[Cell; 9]; 9] {
+    fn parse_board(bytes: &[u8]) -> [[Cell; 9]; 9] {
         let mut board: [[Cell; 9]; 9] = Default::default();
         let mut byte = 0;
 
@@ -174,6 +189,17 @@ impl SudokuAvr {
         }
 
         return board;
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut string = String::new();
+        for i in 0..self.board.len() {
+            for j in 0..self.board[i].len() {
+                string.push_str(self.board[i][j].value.to_string().as_str());
+            }
+        }
+        println!("{}", string);
+        return string;
     }
 
     pub fn send_board(&self, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
@@ -216,6 +242,25 @@ impl SudokuAvr {
     }
 }
 
+pub fn generate_boards(dir: String, diff: Difficulty, num: u32) -> Result<()> {
+    for i in 1..=num {
+        let filename = format!("{}_{}.txt", diff, i);
+        let path = PathBuf::from(format!("./{}/", dir)).join(filename);
+        
+        let sudoku = SudokuAvr::new(&diff);
+
+        let mut f = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&path)
+                    .with_context(|| format!("Failed to create {}", path.display()))?;
+
+        write!(f, "{}", sudoku.to_string());
+        info!("Created '{}'", path.display());
+    }
+    Ok(())
+}
+
 fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
     let data = read_uart(port)?;
     if b"OK\x0D\x0A" == &*data {
@@ -225,6 +270,8 @@ fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
         bail!("Invalid Response");
     }
 }
+
+
 
 fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
     thread::sleep(Duration::from_millis(50));

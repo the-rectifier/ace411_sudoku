@@ -12,6 +12,8 @@
 - [X] Create Boards
   - [X] Printing
   - [X] Solving
+- [X] Explicit Board Generation
+- [ ] Explicit Board Download to AVR
 - [ ] Calculate Time until Solution arrives
 - [X] Argument Passing
 - [ ] Anything else I find down the road
