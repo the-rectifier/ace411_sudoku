@@ -1,15 +1,16 @@
+use anyhow::{bail, Context, Result};
 use colored::*;
-use log::{ info, error };
-use std::time::Duration;
-use std::thread;
-use sudoku::Sudoku;
+use log::{error, info};
 use rand::{thread_rng, Rng};
+use std::io::ErrorKind;
+use std::thread;
+use std::time::Duration;
 use strum_macros::EnumString;
-use anyhow::{ Context, Result, bail };
+use sudoku::Sudoku;
 
-const EASY: u8 = 25;
-const MEDIUM: u8 = 30;
-const HARD: u8 = 35;
+const EASY: u8 = 35;
+const MEDIUM: u8 = 40;
+const HARD: u8 = 45;
 
 #[derive(Debug, EnumString, Clone)]
 pub enum Difficulty {
@@ -22,7 +23,7 @@ pub enum Difficulty {
 }
 
 pub struct SudokuAvr {
-    /* Hold the generated board */ 
+    /* Hold the generated board */
     board: [[Cell; 9]; 9],
     /* Holds the whole solved board */
     solution: [[Cell; 9]; 9],
@@ -32,19 +33,17 @@ pub struct SudokuAvr {
     dif: Difficulty,
 }
 
-
 #[derive(Default, Clone)]
 struct Cell {
     value: u8,
     orig: bool,
 }
 
-
 impl SudokuAvr {
     pub fn new(diff: Difficulty) -> Self {
         let sudoku = Sudoku::generate_unique();
         let sudoku_bytes = sudoku.to_bytes();
-        
+
         let solution = sudoku.solve_unique().unwrap().to_bytes();
 
         info!("Generating Board!");
@@ -77,7 +76,7 @@ impl SudokuAvr {
             for j in 0..board[i].len() {
                 if board[i][j].value != 0 {
                     count += 1;
-                } 
+                }
             }
         }
 
@@ -102,8 +101,8 @@ impl SudokuAvr {
         let mut rng = thread_rng();
 
         while limit < no_cells && !(empty == 81) {
-            let i: usize = rng.gen_range(0..9) as usize; 
-            let j: usize = rng.gen_range(0..9) as usize;    
+            let i: usize = rng.gen_range(0..9) as usize;
+            let j: usize = rng.gen_range(0..9) as usize;
 
             if board[i][j].orig {
                 empty += 1;
@@ -120,20 +119,20 @@ impl SudokuAvr {
     pub fn print_unsolved(&self) {
         print!("{}", "Printing Unsolved Board!\nDifficulty: ".green());
         match self.dif {
-            Difficulty::Easy => println!("{}","EASY".blue()),
-            Difficulty::Medium => println!("{}","MEDIUM".yellow()),
-            Difficulty::Hard => println!("{}","HARD".red()),
+            Difficulty::Easy => println!("{}", "EASY".blue()),
+            Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
+            Difficulty::Hard => println!("{}", "HARD".red()),
         }
-        
+
         SudokuAvr::print_board(&self.board);
     }
 
     pub fn print_solved(&self) {
         print!("{}", "Printing Solved Board!\nDifficulty: ".green());
         match self.dif {
-            Difficulty::Easy => println!("{}","EASY".blue()),
-            Difficulty::Medium => println!("{}","MEDIUM".yellow()),
-            Difficulty::Hard => println!("{}","HARD".red()),
+            Difficulty::Easy => println!("{}", "EASY".blue()),
+            Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
+            Difficulty::Hard => println!("{}", "HARD".red()),
         }
         SudokuAvr::print_board(&self.solution);
     }
@@ -141,19 +140,19 @@ impl SudokuAvr {
     fn print_board(board: &[[Cell; 9]; 9]) {
         println!("\n\t---------------------------");
         for i in 0..board.len() {
-            print!("\t{} | ", i+1);
+            print!("\t{} | ", i + 1);
             for j in 0..board[i].len() {
                 if board[i][j].value == 0 {
                     print!("_ ");
                 } else {
                     print!("{} ", board[i][j].value);
                 }
-                if (j+1) % 3 == 0 && (j+1) != 9 {
+                if (j + 1) % 3 == 0 && (j + 1) != 9 {
                     print!("| ");
                 }
             }
             print!("|");
-            if (i+1) % 3 == 0 && (i+1) !=  9 {
+            if (i + 1) % 3 == 0 && (i + 1) != 9 {
                 print!("\n\t===========================");
             }
             println!();
@@ -162,7 +161,7 @@ impl SudokuAvr {
         println!("\t🤘| 1 2 3 | 4 5 6 | 7 8 9 |\n");
     }
 
-    fn parse_board(bytes: &[u8; 81]) -> [[Cell; 9]; 9]{
+    fn parse_board(bytes: &[u8; 81]) -> [[Cell; 9]; 9] {
         let mut board: [[Cell; 9]; 9] = Default::default();
         let mut byte = 0;
 
@@ -177,21 +176,19 @@ impl SudokuAvr {
         return board;
     }
 
-    fn wait_for_response(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
-        Ok(())
-    }
-
     pub fn send_board(&self, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
         info!("Will send {} chunks to AVR!", self.filled);
 
         match port.write(&self.filled.to_ne_bytes()) {
-            Ok(_) => { 
+            Ok(_) => {
                 info!("Finished Sending");
                 port.flush().unwrap();
                 thread::sleep(Duration::from_millis(2));
-                //TODO await OK response
+                wait_ok(port)?;
             }
-            Err(_) => { bail!("Unable to Write!"); }
+            Err(_) => {
+                bail!("Unable to Write!");
+            }
         }
 
         for i in 0..self.board.len() {
@@ -200,16 +197,18 @@ impl SudokuAvr {
                     continue;
                 }
                 let chunk = &[i as u8, j as u8, self.board[i][j].value, b'\x0D', b'\x0A'];
-                
+
                 match port.write(chunk) {
-                    Ok(_) => { 
-                        info!("Wrote {:?} to {:?}", chunk, port.name().unwrap()); 
+                    Ok(_) => {
+                        info!("Wrote {:?} to {:?}", chunk, port.name().unwrap());
                         port.flush().unwrap();
-                        thread::sleep(Duration::from_millis(2));
-                        //TODO await OK response
+                        
+                        wait_ok(port)?;
                     }
-                    Err(_) => { bail!("Unable to Write!"); }
-                }       
+                    Err(_) => {
+                        bail!("Unable to Write!");
+                    }
+                }
             }
         }
         info!("Done Sending!");
@@ -217,4 +216,30 @@ impl SudokuAvr {
     }
 }
 
+fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+    let data = read_uart(port)?;
+    if b"OK\x0D\x0A" == &*data {
+        info!("OK");
+        return Ok(());
+    } else {
+        bail!("Invalid Response");
+    }
+}
 
+fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
+    thread::sleep(Duration::from_millis(50));
+    let readable_bytes = port.bytes_to_read()?;
+    info!("Reading {} bytes from {}", readable_bytes, port.name().unwrap());
+
+    let mut data: Vec<u8> = vec![0; readable_bytes as usize];
+    match port.read(data.as_mut_slice()) {
+        Ok(_) => (),
+        Err(ref e) => {
+            if e.kind() == ErrorKind::TimedOut {
+                bail!("Timed out!")
+            }
+        }
+    }
+
+    Ok(data)
+}
