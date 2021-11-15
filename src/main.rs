@@ -1,9 +1,11 @@
-use serialport::{ available_ports, DataBits, StopBits, Parity };
-use std::io::{self, Write};
-use anyhow::{ Context, Result, bail };
-use log::{ info, error };
-use simplelog::{ ColorChoice, TermLogger, TerminalMode };
+use anyhow::{bail, Context, Result};
 use colored::*;
+use log::{error, info, warn};
+use serialport::{available_ports, DataBits, Parity, StopBits};
+use simplelog::{ColorChoice, TermLogger, TerminalMode, ConfigBuilder};
+use std::io::{stdin, Read, Write};
+use std::thread;
+use std::time::Duration;
 use structopt::StructOpt;
 use strum_macros::EnumString;
 
@@ -22,7 +24,7 @@ enum MyParity {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "ACE411 - Sudoku <=> AVR Interface",
-    author = "Stavrou Odysseas (canopus)",
+    author = "Stavrou Odysseas (canopus)"
 )]
 struct Opts {
     #[structopt(subcommand)]
@@ -40,10 +42,10 @@ enum Command {
 
 #[derive(StructOpt, Debug)]
 struct Run {
-    #[structopt(long="dev", short="u", required_unless("ports"))]
+    #[structopt(long = "dev", short = "u")]
     dev: String,
 
-    #[structopt(long="difficulty", short="d")]
+    #[structopt(long = "difficulty", short = "d")]
     difficulty: sudoku_lib::Difficulty,
 
     #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
@@ -52,39 +54,72 @@ struct Run {
     #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
     db: u32,
 
-    #[structopt(long="parity", short="p", default_value="None")]
+    #[structopt(long = "parity", short = "p", default_value = "None")]
     p: MyParity,
 
-    #[structopt(long="baud-rate", short="r")]
+    #[structopt(long = "baud-rate", short = "r")]
     br: u32,
+
+    // #[structopt(long = "timeout", short = "t", default_value = "200")]
+    // timeout: u64,
 }
 
-fn get_ports() { 
+fn get_ports() {
     let ports = available_ports().expect("No ports found!");
     for (i, p) in ports.iter().enumerate() {
         info!("Found Port ({}): {}", i, p.port_name);
     }
 }
 
-
-
 fn run(dif: sudoku_lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
     let sudoku = sudoku_lib::SudokuAvr::new(dif);
 
+    println!();
+    info!("Generated Board!");
+    sudoku.print_unsolved();
+
+    info!("Generated Solution!");
+    sudoku.print_solved();
+
+
+    info!("Ready to send the Unsolved Board to the AVR");
+    info!("Hit Enter when Ready!");
+    let mut character = [0];
+
+    while let Err(_) = stdin().read(&mut character) {
+        bail!("Error Reading from Keyboard");
+    }
+
+    print!("Sending in ");
+    for i in (0..=5).rev() {
+        print!("{}...", i);
+        std::io::stdout().flush()?;
+        thread::sleep(Duration::from_millis(500));
+    }
+    println!();
     info!("Sending Unsolved board to {:?}", port.name().unwrap());
     sudoku.send_board(port)?;
 
     Ok(())
 }
 
-
-fn open_port(dev: &str, baud: u32, sb: StopBits, db: DataBits, p: Parity) -> Result<Box<dyn serialport::SerialPort>> {
+fn open_port(
+    dev: &str,
+    // timeout: u64,
+    baud: u32,
+    sb: StopBits,
+    db: DataBits,
+    p: Parity,
+) -> Result<Box<dyn serialport::SerialPort>> {
     let builder = serialport::new(dev, baud)
-                            .stop_bits(sb)
-                            .data_bits(db)
-                            .parity(p);
+        .stop_bits(sb)
+        .data_bits(db)
+        // .timeout(Duration::from_millis(timeout))
+        .parity(p);
 
-    let port = builder.open().with_context(|| format!("Unable to open port {}!", dev))?;
+    let port = builder
+        .open()
+        .with_context(|| format!("Unable to open port {}!", dev))?;
 
     info!("{}", "Opened Port Successfully!!".green());
 
