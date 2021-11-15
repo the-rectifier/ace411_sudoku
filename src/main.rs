@@ -94,22 +94,22 @@ fn open_port(dev: &str, baud: u32, sb: StopBits, db: DataBits, p: Parity) -> Res
 fn main() -> Result<()> {
     let sb: StopBits;
     let db: DataBits;
-    let p : Parity;
+    let p: Parity;
     let br: u32;
 
     TermLogger::init(
         log::LevelFilter::Info,
-        simplelog::Config::default(),
+        ConfigBuilder::new().set_time_to_local(true).build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    ).expect("Failed to init logger");
-
+    )
+    .expect("Failed to init logger");
 
     match Command::from_args() {
         Command::List => {
             get_ports();
             return Ok(());
-            },
+        }
         Command::Run(args) => {
             br = args.br;
 
@@ -140,7 +140,7 @@ fn main() -> Result<()> {
                 std::process::exit(-1);
             }
         }
-    }    
-    
+    }
+
     Ok(())
 }
