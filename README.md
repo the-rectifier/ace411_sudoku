@@ -5,7 +5,7 @@
 - [ ] Add UART functionality
   - [X] Send Unsolved Board
   - [ ] Recieve Solved Board and Check
-  - [ ] Await Responses Each time a write is issued
+  - [X] Await Responses Each time a write is issued
 - [X] Cross Platform UART Ports ([serialport-rs](https://github.com/Susurrus/serialport-rs))
 - [X] Add Difficulty Levels [Easy, Medium, Hard]
   - Randomly Remove Cells (Remaining Uniquely Solvable)
