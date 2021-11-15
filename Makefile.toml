@@ -1,0 +1,36 @@
+[tasks.sudoku]
+script = [
+    "mkdir -p ./out",
+    "cp -f ./target/x86_64-pc-windows-gnu/release/ace411_sudoku.exe ./out/",
+    "cp -f ./target/x86_64-unknown-linux-gnu/release/ace411_sudoku ./out/"
+]
+dependencies = ["linux_rel", "windows_rel"]
+
+[tasks.debug]
+dependencies = ["linux_dbg", "windows_dbg"]
+script = [
+    "mkdir -p ./out_dbg",
+    "cp -f ./target/x86_64-pc-windows-gnu/debug/ace411_sudoku.exe ./out/",
+    "cp -f ./target/x86_64-unknown-linux-gnu/debug/ace411_sudoku ./out/"
+]
+
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.windows_rel]
+command = "cargo"
+args = ["build", "--release", "--target", "x86_64-pc-windows-gnu"]
+
+[tasks.linux_rel]
+command = "cargo"
+args = ["build", "--release", "--target", "x86_64-unknown-linux-gnu"]
+
+[tasks.windows_dbg]
+command = "cargo"
+args = ["build", "--target", "x86_64-pc-windows-gnu"]
+
+[tasks.linux_dbg]
+command = "cargo"
+args = ["build", "--target", "x86_64-unknown-linux-gnu"]
+
