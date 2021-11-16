@@ -6,6 +6,7 @@
   - [X] Send Unsolved Board
   - [ ] Recieve Solved Board and Check
   - [X] Await Responses Each time a write is issued
+  - [ ] Interractive Shell Conforming to the Haze Command Set
 - [X] Cross Platform UART Ports ([serialport-rs](https://github.com/Susurrus/serialport-rs))
 - [X] Add Difficulty Levels [Easy, Medium, Hard]
   - Randomly Remove Cells (Remaining Uniquely Solvable)
@@ -13,7 +14,7 @@
   - [X] Printing
   - [X] Solving
 - [X] Explicit Board Generation
-- [ ] Explicit Board Download to AVR
+- [X] Explicit Board Download to AVR
 - [ ] Calculate Time until Solution arrives
 - [X] Argument Passing
 - [ ] Anything else I find down the road

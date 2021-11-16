@@ -3,7 +3,8 @@ use colored::*;
 use log::{error, info, warn};
 use serialport::{available_ports, DataBits, Parity, StopBits};
 use simplelog::{ColorChoice, TermLogger, TerminalMode, ConfigBuilder};
-use std::io::{stdin, Read, Write};
+use std::io::{ BufRead, BufReader, stdin, Read, Write };
+use std::fs::{ File };
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -48,9 +49,6 @@ enum Command {
 
 #[derive(StructOpt, Debug)]
 struct Gen {
-    #[structopt(long = "difficulty", short = "d")]
-    difficulty: lib::Difficulty,
-
     #[structopt(long = "directory", short = "p")]
     directory: String,
 
@@ -131,25 +129,10 @@ fn run(dif: lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Resu
     info!("Generated Solution!");
     sudoku.print_solved();
 
-
-    info!("Ready to send the Unsolved Board to the AVR");
-    info!("Hit Enter when Ready!");
-    let mut character = [0];
-
-    while let Err(_) = stdin().read(&mut character) {
-        bail!("Error Reading from Keyboard");
-    }
-
-    print!("Sending in ");
-    for i in (0..=5).rev() {
-        print!("{}...", i);
-        std::io::stdout().flush()?;
-        thread::sleep(Duration::from_millis(500));
-    }
-    println!();
+    clear_to_send()?;
     info!("Sending Unsolved board to {:?}", port.name().unwrap());
     sudoku.send_board(port)?;
-
+    //TODO Interactive
     Ok(())
 }
 
@@ -209,17 +192,32 @@ fn main() -> Result<()> {
             };
 
             let mut port = open_port(&port_config)?;
+            let file = File::open(&args.board)?;
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+            let vec: Vec<&str> = args.board.split('/').collect();
+            let vec: Vec<&str> = vec[vec.len()-1].split('_').collect();
+            let diff: lib::Difficulty;
 
+            match vec[0] {
+                "Easy" => diff = lib::Difficulty::Easy,
+                "Medium" => diff = lib::Difficulty::Medium,
+                "Hard" => diff = lib::Difficulty::Hard,
+                _ => bail!("Invalid File Name")
+            }
 
+            reader.read_line(&mut line)?;
+            let sudoku = lib::SudokuAvr::new_from_str(&mut line, diff);
+
+            clear_to_send()?;
+            sudoku.send_board(&mut port)?;
+            //TODO Interactive
         }
-        Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.difficulty, gen.number)?; }
+        Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.number)?; }
     }
 
     Ok(())
 }
-
-
-
 
 
 fn check_stop_bits(sb: u8) -> Result<StopBits> {
@@ -241,10 +239,32 @@ fn check_data_bits(db: u8) -> Result<DataBits> {
     }
 }
 
+
 fn check_parity(parity: MyParity) -> Result<Parity> {
     match parity {
         MyParity::Even => Ok(Parity::Even),
         MyParity::Odd => Ok(Parity::Odd),
         MyParity::None => Ok(Parity::None),
     }
+}
+
+
+fn clear_to_send() -> Result<()> {
+    info!("Ready to send the Unsolved Board to the AVR");
+    info!("Hit Enter when Ready!");
+    let mut character = [0];
+
+    while let Err(_) = stdin().read(&mut character) {
+        bail!("Error Reading from Keyboard");
+    }
+
+    print!("Sending in ");
+    for i in (0..=5).rev() {
+        print!("{}...", i);
+        std::io::stdout().flush()?;
+        thread::sleep(Duration::from_millis(500));
+    }
+    println!();
+
+    Ok(())
 }
