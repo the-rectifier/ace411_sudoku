@@ -17,8 +17,7 @@ use std::fs::{ self, File, OpenOptions };
 const EASY: u8 = 35;
 const MEDIUM: u8 = 40;
 const HARD: u8 = 45;
-
-
+const ULTRA: u8 = 65;
 
 #[derive(Debug, EnumString, Clone, Display, EnumIter)]
 pub enum Difficulty {
@@ -28,6 +27,8 @@ pub enum Difficulty {
     Medium,
     #[strum(ascii_case_insensitive)]
     Hard,
+    #[strum(ascii_case_insensitive)]
+    Ultra,
 }
 
 // #[derive(Default)]
@@ -74,6 +75,7 @@ impl SudokuAvr {
             Difficulty::Easy => SudokuAvr::remove_cells(&mut board.board, EASY),
             Difficulty::Medium => SudokuAvr::remove_cells(&mut board.board, MEDIUM),
             Difficulty::Hard => SudokuAvr::remove_cells(&mut board.board, HARD),
+            Difficulty::Ultra => SudokuAvr::remove_cells(&mut board.board, ULTRA),
         };
 
         board.filled = SudokuAvr::count_filled(&board.board);
@@ -149,6 +151,7 @@ impl SudokuAvr {
             Difficulty::Easy => println!("{}", "EASY".blue()),
             Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
             Difficulty::Hard => println!("{}", "HARD".red()),
+            Difficulty::Ultra => println!("{}", "ULTRA".red().bold()),
         }
 
         SudokuAvr::print_board(&self.board);
@@ -160,6 +163,7 @@ impl SudokuAvr {
             Difficulty::Easy => println!("{}", "EASY".blue()),
             Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
             Difficulty::Hard => println!("{}", "HARD".red()),
+            Difficulty::Ultra => println!("{}", "ULTRA".red().bold()),
         }
         SudokuAvr::print_board(&self.solution);
     }
@@ -242,11 +246,12 @@ impl SudokuAvr {
                 }
 
                 let chunk = &[b'N', i as u8, j as u8, board[i][j].value, b'\x0D', b'\x0A'];
-
+                //TODO clear input buffer before sending
+                
                 match port.write(chunk) {
                     Ok(_) => {
-                        info!("Wrote {:?} to {:?}", chunk, port.name().unwrap());
-                        port.flush().unwrap();
+                        info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get Uart Name"));
+                        port.flush().expect("Unable to Flush!");
                         
                         wait_ok(port)?;
                     }
@@ -295,10 +300,23 @@ fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
 }
 
 
-fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
+pub fn write_uart(port: &mut Box<dyn serialport::SerialPort>, data: &[u8]) -> Result<()> {
+
+    info!("Writing {} bytes to {}", data.len(), port.name().expect("Failed to get Uart Name"));
+    match port.write(data) {
+        Ok(len) => { info!("Wrote {} bytes!", len); }
+        Err(_) => { bail!("Unable to Write to Uart"); }
+    }
+
+    port.flush()?;
+    Ok(())
+}
+
+
+pub fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
     thread::sleep(Duration::from_millis(50));
     let readable_bytes = port.bytes_to_read()?;
-    info!("Reading {} bytes from {}", readable_bytes, port.name().unwrap());
+    info!("Reading {} bytes from {}", readable_bytes, port.name().expect("Failed to get Uart Name"));
 
     let mut data: Vec<u8> = vec![0; readable_bytes as usize];
     match port.read(data.as_mut_slice()) {
@@ -312,3 +330,4 @@ fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
 
     Ok(data)
 }
+

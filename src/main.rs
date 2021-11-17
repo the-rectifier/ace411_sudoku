@@ -12,6 +12,17 @@ use strum_macros::EnumString;
 
 mod lib;
 
+
+const OK: [u8; 4] = [b'O', b'K', b'\x0D', b'\x0A'];
+const AT: [u8; 4] = [b'A', b'T', b'\x0D', b'\x0A'];
+const CLEAR: [u8; 3] = [b'C', b'\x0D', b'\x0A'];
+const T: [u8; 3] = [b'T', b'\x0D', b'\x0A'];
+const BREAK: [u8; 3] = [b'B', b'\x0D', b'\x0A'];
+const PLAY: [u8; 3] = [b'P', b'\x0D', b'\x0A'];
+const SAVE: [u8; 3] = [b'S', b'\x0D', b'\x0A'];
+
+
+
 #[derive(Debug, EnumString)]
 enum MyParity {
     #[strum(ascii_case_insensitive)]
@@ -129,10 +140,9 @@ fn run(dif: lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Resu
     info!("Generated Solution!");
     sudoku.print_solved();
 
-    clear_to_send()?;
-    info!("Sending Unsolved board to {:?}", port.name().unwrap());
-    sudoku.send_board(port)?;
-    //TODO Interactive
+    info!("Going Interactive!");
+    go_interactive(port, &sudoku)?;
+
     Ok(())
 }
 
@@ -209,9 +219,8 @@ fn main() -> Result<()> {
             reader.read_line(&mut line)?;
             let sudoku = lib::SudokuAvr::new_from_str(&mut line, diff);
 
-            clear_to_send()?;
-            sudoku.send_board(&mut port)?;
-            //TODO Interactive
+            info!("Going Interactive!");
+            go_interactive(&mut port, &sudoku)?;
         }
         Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.number)?; }
     }
@@ -267,4 +276,93 @@ fn clear_to_send() -> Result<()> {
     println!();
 
     Ok(())
+}
+
+
+fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::SudokuAvr) -> Result<()> {
+
+    let mut user_input = String::new();
+    
+    loop {
+        print!("{}", "> ".green().bold());
+        std::io::stdout().flush().expect("Couldn't Flush STDOUT");
+
+        user_input.clear();
+        stdin().read_line(&mut user_input).with_context(|| format!("Unable to Read Line!"))?;
+        let user_input_vec: Vec<&str> = user_input.split_ascii_whitespace().collect(); 
+
+        match user_input_vec[0] {
+            "at" => lib::write_uart(port, &AT)?,
+            "clear" => lib::write_uart(port, &CLEAR)?,
+            "break" => lib::write_uart(port, &BREAK)?,
+            "play" => lib::write_uart(port, &PLAY)?,
+            "exit" => break,
+            "download" => {
+                clear_to_send()?;
+                info!("Sending Unsolved board to {:?}", port.name().expect("Couldn't Get Port Name!"));
+                sudoku.send_board(port)?;
+            }
+            "fill" => {
+                if user_input_vec.len() > 4 {
+                    error!("Invalid Command!");
+                    continue;
+                }
+
+                let x: u8;
+                let y: u8;
+                let z: u8;
+
+                match user_input_vec[1].parse::<u8>() {
+                    Ok(num) => x = num,
+                    Err(_) => { error!("Arguments must be within 1-9"); continue;}
+                }
+                match user_input_vec[2].parse::<u8>() {
+                    Ok(num) => y = num,
+                    Err(_) => { error!("Arguments must be within 1-9"); continue;}
+                }
+                match user_input_vec[3].parse::<u8>() {
+                    Ok(num) => z = num,
+                    Err(_) => { error!("Arguments must be within 1-9"); continue;}
+                }
+
+                if x > 9 || y > 9 || z > 9 {
+                    error!("Arguments must be within 1-9");
+                    continue;
+                }
+                lib::write_uart(port, [b'N', x, y, z, b'\x0D', b'\x0A'].as_ref())?;
+            },
+            "debug" => {
+                if user_input_vec.len() > 3 {
+                    error!("Invalid Command!");
+                    continue;
+                }
+                let x: u8;
+                let y: u8;
+
+                match user_input_vec[1].parse::<u8>() {
+                    Ok(num) => x = num,
+                    Err(_) => { error!("Arguments must be within 1-9"); continue;}
+                }
+                match user_input_vec[2].parse::<u8>() {
+                    Ok(num) => y = num,
+                    Err(_) => { error!("Arguments must be within 1-9"); continue;}
+                }
+
+                if x > 9 || y > 9 {
+                    error!("Arguments must be within 1-9");
+                    continue;
+                }
+
+                lib::write_uart(port, [b'D', x, y, b'\x0D', b'\x0A'].as_ref())?;
+            },
+            "help" => print_help(),
+            _ => error!("Invalid Command!"),
+        }
+    }
+    Ok(())
+}
+
+
+fn print_help() {
+    println!("TODO: Help menu")
 }
