@@ -1,18 +1,17 @@
-use anyhow::{bail, Context, Result};
+use log::info;
 use colored::*;
-use log::{error, info};
-use rand::{thread_rng, Rng};
-use std::io::ErrorKind;
 use std::thread;
-use std::str::from_utf8;
-use std::time::Duration;
-use strum::IntoEnumIterator;
-use strum_macros::{ EnumString, Display, EnumIter };
 use sudoku::Sudoku;
+use std::time::Duration;
+use std::fs::OpenOptions;
 use std::path::{ PathBuf };
-use std::io::Write;
-use std::fs::{ self, File, OpenOptions };
+use strum::IntoEnumIterator;
+use rand::{ thread_rng, Rng };
+use std::io::{ Write, ErrorKind };
+use anyhow::{bail, Context, Result};
+use strum_macros::{ EnumString, Display, EnumIter };
 
+type Port = Box<dyn serialport::SerialPort>;
 
 const EASY: u8 = 35;
 const MEDIUM: u8 = 40;
@@ -44,8 +43,8 @@ pub struct SudokuAvr {
 }
 
 #[derive(Default, Clone)]
-struct Cell {
-    value: u8,
+pub struct Cell {
+    pub value: u8,
     orig: bool,
 }
 
@@ -123,6 +122,19 @@ impl SudokuAvr {
             }
         }
     }
+
+
+    pub fn check(&self, board: &[[Cell; 9]; 9]) -> bool {
+        for i in 0..self.solution.len() {
+            for j in 0..self.solution[i].len() {
+                if self.solution[i][j].value != board[i][j].value {
+                    return false;
+                }
+            } 
+        }
+        return true;
+    }
+
 
     fn remove_cells(board: &mut [[Cell; 9]; 9], no_cells: u8) {
         let mut empty = 0;
@@ -218,27 +230,14 @@ impl SudokuAvr {
         return string;
     }
 
-    pub fn send_board(&self, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+    pub fn send_board(&self, port: &mut Port) -> Result<()> {
         info!("Will send {} chunks to AVR!", self.filled);
-
-        match port.write(&self.filled.to_ne_bytes()) {
-            Ok(_) => {
-                info!("Finished Sending");
-                port.flush().unwrap();
-                thread::sleep(Duration::from_millis(2));
-                wait_ok(port)?;
-
-                SudokuAvr::do_send(&self.board, port)?;
-            }
-            Err(_) => {
-                bail!("Unable to Write!");
-            }
-        }
-
+        thread::sleep(Duration::from_millis(50));
+        SudokuAvr::do_send(&self.board, port)?;
         Ok(())
     }
 
-    fn do_send(board: &[[Cell; 9]; 9], port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+    fn do_send(board: &[[Cell; 9]; 9], port: &mut Port) -> Result<()> {
         for i in 0..board.len() {
             for j in 0..board.len() {
                 if board[i][j].value == 0 {
@@ -246,14 +245,12 @@ impl SudokuAvr {
                 }
 
                 let chunk = &[b'N', i as u8, j as u8, board[i][j].value, b'\x0D', b'\x0A'];
-                //TODO clear input buffer before sending
-                
                 match port.write(chunk) {
                     Ok(_) => {
                         info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get Uart Name"));
                         port.flush().expect("Unable to Flush!");
-                        
-                        wait_ok(port)?;
+                        thread::sleep(Duration::from_millis(50));
+                        wait_response(port, b"OK\x0D\x0A")?;
                     }
                     Err(_) => {
                         bail!("Unable to Write!");
@@ -289,9 +286,9 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
 }
 
 
-fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
-    let data = read_uart(port)?;
-    if b"OK\x0D\x0A" == &*data {
+pub fn wait_response(port: &mut Port, response: &[u8]) -> Result<()> {
+    let data = read_uart(port, response.len() as i32)?;
+    if response == &*data {
         info!("OK");
         return Ok(());
     } else {
@@ -299,24 +296,39 @@ fn wait_ok(port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
     }
 }
 
+pub fn wait_response_silent(port: &mut Port, response: &[u8]) -> Result<()> {
+    let data = read_uart(port, response.len() as i32)?;
+    if response == &*data {
+        return Ok(());
+    } else {
+        bail!("");
+    }
+}
 
-pub fn write_uart(port: &mut Box<dyn serialport::SerialPort>, data: &[u8]) -> Result<()> {
 
+
+pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
     info!("Writing {} bytes to {}", data.len(), port.name().expect("Failed to get Uart Name"));
     match port.write(data) {
         Ok(len) => { info!("Wrote {} bytes!", len); }
         Err(_) => { bail!("Unable to Write to Uart"); }
     }
-
     port.flush()?;
+    thread::sleep(Duration::from_millis(50));
     Ok(())
 }
 
 
-pub fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> {
-    thread::sleep(Duration::from_millis(50));
-    let readable_bytes = port.bytes_to_read()?;
-    info!("Reading {} bytes from {}", readable_bytes, port.name().expect("Failed to get Uart Name"));
+pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
+    let readable_bytes: usize;
+
+    if size <= 0 {
+        readable_bytes = port.bytes_to_read()? as usize;
+    } else {
+        readable_bytes = size as usize;
+    }
+
+    // info!("Reading {} bytes from {}", readable_bytes, port.name().expect("Failed to get Uart Name"));
 
     let mut data: Vec<u8> = vec![0; readable_bytes as usize];
     match port.read(data.as_mut_slice()) {
@@ -327,7 +339,6 @@ pub fn read_uart(port: &mut Box<dyn serialport::SerialPort>) -> Result<Vec<u8>> 
             }
         }
     }
-
     Ok(data)
 }
 

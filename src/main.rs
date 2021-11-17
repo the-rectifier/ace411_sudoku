@@ -1,26 +1,30 @@
-use anyhow::{bail, Context, Result};
 use colored::*;
-use log::{error, info, warn};
-use serialport::{available_ports, DataBits, Parity, StopBits};
-use simplelog::{ColorChoice, TermLogger, TerminalMode, ConfigBuilder};
-use std::io::{ BufRead, BufReader, stdin, Read, Write };
-use std::fs::{ File };
 use std::thread;
+use std::fs::File;
 use std::time::Duration;
 use structopt::StructOpt;
+use std::time::{Instant};
+use log::{ error, info };
 use strum_macros::EnumString;
+use anyhow::{ bail, Context, Result };
+use std::io::{ BufRead, BufReader, stdin, Read, Write };
+use serialport::{ available_ports, DataBits, Parity, StopBits };
+use simplelog::{ ColorChoice, TermLogger, TerminalMode, ConfigBuilder };
+
 
 mod lib;
 
+type Port = Box<dyn serialport::SerialPort>;
 
-const OK: [u8; 4] = [b'O', b'K', b'\x0D', b'\x0A'];
-const AT: [u8; 4] = [b'A', b'T', b'\x0D', b'\x0A'];
-const CLEAR: [u8; 3] = [b'C', b'\x0D', b'\x0A'];
-const T: [u8; 3] = [b'T', b'\x0D', b'\x0A'];
-const BREAK: [u8; 3] = [b'B', b'\x0D', b'\x0A'];
-const PLAY: [u8; 3] = [b'P', b'\x0D', b'\x0A'];
-const SAVE: [u8; 3] = [b'S', b'\x0D', b'\x0A'];
 
+const OK: &[u8] = b"OK\r\n";
+const AT: &[u8] = b"AT\r\n";
+const DONE: &[u8] = b"D\r\n";
+const CLEAR: &[u8] = b"C\r\n";
+const T: &[u8] = b"T\r\n";
+const BREAK: &[u8] = b"B\r\n";
+const PLAY: &[u8] = b"P\r\n";
+const SAVE: &[u8] = b"S\r\n";
 
 
 #[derive(Debug, EnumString)]
@@ -68,7 +72,7 @@ struct Gen {
 }
 
 #[derive(StructOpt, Debug)]
-struct Prog {
+struct Prog { 
     #[structopt(long = "dev", short = "u")]
     dev: String,
 
@@ -86,6 +90,9 @@ struct Prog {
 
     #[structopt(long = "board-file", short = "b")]
     board: String,
+
+    #[structopt(long = "interactive", short = "i")]
+    inter: bool,
 }
 
 
@@ -130,7 +137,7 @@ fn get_ports() {
     }
 }
 
-fn run(dif: lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Result<()> {
+fn run(dif: lib::Difficulty, port: &mut Port) -> Result<()> {
     let sudoku = lib::SudokuAvr::new(&dif);
 
     println!();
@@ -141,12 +148,12 @@ fn run(dif: lib::Difficulty, port: &mut Box<dyn serialport::SerialPort>) -> Resu
     sudoku.print_solved();
 
     info!("Going Interactive!");
-    go_interactive(port, &sudoku)?;
+    go_interactive(port, &sudoku, false)?;
 
     Ok(())
 }
 
-fn open_port(port_config: &PortConfig) -> Result<Box<dyn serialport::SerialPort>> {
+fn open_port(port_config: &PortConfig) -> Result<Port> {
     let builder = serialport::new(port_config.dev.as_str(), port_config.baud_rate)
         .stop_bits(port_config.stop_bits)
         .data_bits(port_config.data_bits)
@@ -218,9 +225,11 @@ fn main() -> Result<()> {
 
             reader.read_line(&mut line)?;
             let sudoku = lib::SudokuAvr::new_from_str(&mut line, diff);
-
-            info!("Going Interactive!");
-            go_interactive(&mut port, &sudoku)?;
+            sudoku.send_board(&mut port)?;
+            if args.inter {
+                info!("Going Interactive!");
+                go_interactive(&mut port, &sudoku, true)?;
+            }
         }
         Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.number)?; }
     }
@@ -279,8 +288,29 @@ fn clear_to_send() -> Result<()> {
 }
 
 
-fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::SudokuAvr) -> Result<()> {
+fn clear_to_recv() -> Result<()> {
+    info!("Ready to Receive Board and Check Solution");
+    info!("Hit Enter when Ready!");
+    let mut character = [0];
 
+    while let Err(_) = stdin().read(&mut character) {
+        bail!("Error Reading from Keyboard");
+    }
+
+    print!("Receiving in ");
+    for i in (0..=5).rev() {
+        print!("{}...", i);
+        std::io::stdout().flush()?;
+        thread::sleep(Duration::from_millis(500));
+    }
+    println!();
+
+    Ok(())
+}
+
+
+fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Result<()> {
+    let mut flag_send = flag;
     let mut user_input = String::new();
     
     loop {
@@ -292,15 +322,56 @@ fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::Sudo
         let user_input_vec: Vec<&str> = user_input.split_ascii_whitespace().collect(); 
 
         match user_input_vec[0] {
-            "at" => lib::write_uart(port, &AT)?,
-            "clear" => lib::write_uart(port, &CLEAR)?,
-            "break" => lib::write_uart(port, &BREAK)?,
-            "play" => lib::write_uart(port, &PLAY)?,
+            "at" => {
+                lib::write_uart(port, &AT)?;
+                lib::wait_response(port, &OK)?;
+            },
+            "clear" => { 
+                lib::write_uart(port, &CLEAR)?; 
+                lib::wait_response(port, &OK)?;
+                flag_send = false; 
+            },
+            "break" => {
+                lib::write_uart(port, &BREAK)?;
+                lib::wait_response(port, &OK)?;
+            },
+            "play" => {
+                if !flag_send {
+                    error!("No board Downloaded!");
+                    continue;
+                }
+                lib::write_uart(port, &PLAY)?;
+
+                lib::wait_response(port, OK)?; 
+                    
+
+                let time_now = Instant::now();
+
+                loop {
+                    match lib::wait_response_silent(port, &DONE) {
+                        Ok(_) => break,
+                        Err(_) => continue
+                    }
+                }
+                let time_elapsed = time_now.elapsed();
+                
+                info!("{}", format!("Solved in: {:?}", time_elapsed).green().bold());
+                clear_to_recv()?;
+                match recv_and_check(port, &sudoku) {
+                    Ok(_) => info!("{}", format!("Valid Solution!!").green().bold()),
+                    Err(_) => info!("{}", format!("Invalid Solution! :( ").red().bold()),
+                }
+            },
             "exit" => break,
             "download" => {
+                if flag_send {
+                    error!("Game Already Running!");
+                    continue;
+                }
                 clear_to_send()?;
                 info!("Sending Unsolved board to {:?}", port.name().expect("Couldn't Get Port Name!"));
                 sudoku.send_board(port)?;
+                flag_send = true;
             }
             "fill" => {
                 if user_input_vec.len() > 4 {
@@ -330,6 +401,7 @@ fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::Sudo
                     continue;
                 }
                 lib::write_uart(port, [b'N', x, y, z, b'\x0D', b'\x0A'].as_ref())?;
+                lib::wait_response(port, b"OK\x0D\x0A")?;
             },
             "debug" => {
                 if user_input_vec.len() > 3 {
@@ -354,8 +426,14 @@ fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::Sudo
                 }
 
                 lib::write_uart(port, [b'D', x, y, b'\x0D', b'\x0A'].as_ref())?;
+                let data = lib::read_uart(port, 6)?;
+
+                info!("{}", format!("[{},{}]: {}", data[1] & 0x0F, data[2] & 0x0F, data[3] & 0x0F).yellow().bold());
+
             },
-            "help" => print_help(),
+            "solution" => sudoku.print_solved(),
+            "unsolved" => sudoku.print_unsolved(),
+            "help" | "?" => print_help(),
             _ => error!("Invalid Command!"),
         }
     }
@@ -363,6 +441,36 @@ fn go_interactive(port: &mut Box<dyn serialport::SerialPort>, sudoku: &lib::Sudo
 }
 
 
+fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
+    let mut p_board: [[lib::Cell; 9]; 9] = Default::default();
+
+    lib::write_uart(port, &SAVE)?;
+    let mut data: Vec<u8>; 
+
+    loop {
+        data = lib::read_uart(port, 6)?;
+        if &data[..3] == DONE {
+            lib::write_uart(port, &OK)?;
+            break;
+        }
+        p_board[(data[1] & 0x0F) as usize -1][(data[2] & 0x0F) as usize -1].value = data[3] & 0x0F;
+        lib::write_uart(port, &T)?;
+    }
+    
+    if sudoku.check(&p_board) { return Ok(()); } else { bail!(""); }
+}
+
+
 fn print_help() {
-    println!("TODO: Help menu")
+    println!("{}", "Available Commands: ".yellow());
+    println!("at");
+    println!("download");
+    println!("break");
+    println!("fill");
+    println!("debug");
+    println!("exit");
+    println!("grab");
+    println!("solution");
+    println!("unsolved");
+    println!("help | '?' ");
 }
