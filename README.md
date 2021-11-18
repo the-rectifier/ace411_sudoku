@@ -6,7 +6,7 @@
 
 The course on Embedded Systems (ACE411) at TU Crete had us develop a Sudoku Solver on an ATMega16 (Using the STK-500). So I wrote a small frontend / interface in Rust to interact with the STK-500 over UART.
 
-### Why:
+### Why
 
 Because I wanted to learn more about Rust and I was definitely not going to be sending 81 Cells by hand using Putty
 
@@ -155,7 +155,7 @@ Or you can [Build](#Build) it yourself.
 
 ---
 
-### Build 
+### Build
 
 - Install [Rust](https://www.rust-lang.org/learn/get-started) using rustup
 - Add windows (or linux) target:
