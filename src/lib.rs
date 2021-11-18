@@ -11,13 +11,16 @@ use std::io::{ Write, ErrorKind };
 use anyhow::{bail, Context, Result};
 use strum_macros::{ EnumString, Display, EnumIter };
 
+// Declare Type for opened Port
 type Port = Box<dyn serialport::SerialPort>;
 
+// Declare Amount of Cells to be removed based on difficulty level
 const EASY: u8 = 35;
 const MEDIUM: u8 = 40;
 const HARD: u8 = 45;
 const ULTRA: u8 = 65;
 
+// Implement Appropriate Traits for Difficulty Enum
 #[derive(Debug, EnumString, Clone, Display, EnumIter)]
 pub enum Difficulty {
     #[strum(ascii_case_insensitive)]
@@ -30,6 +33,7 @@ pub enum Difficulty {
     Ultra,
 }
 
+// Define Structs
 // #[derive(Default)]
 pub struct SudokuAvr {
     /* Hold the generated board */
@@ -50,6 +54,10 @@ pub struct Cell {
 
 
 impl SudokuAvr {
+    // Constructor for struct Sudoku
+    // Takes as argument the level of Difficulty and removes Cells accordingly
+    // Cells are removed randomly, but still keeping the board uniquely solvable
+    // returns instantiated Struct
     pub fn new(diff: &Difficulty) -> Self {
         let sudoku = Sudoku::generate_unique();
         let sudoku_bytes = sudoku.to_bytes();
@@ -81,6 +89,9 @@ impl SudokuAvr {
         return board;
     }
 
+    // Constructor using a string slice as argument
+    // Removes Cells depending on Difficulty level
+    // Returns Instantiated Struct 
     pub fn new_from_str(line: &str, diff: Difficulty) -> Self {
         info!("Generating Board");
 
@@ -99,6 +110,7 @@ impl SudokuAvr {
         return board;
     }
 
+    // Counts filled cells
     fn count_filled(board: &[[Cell; 9]; 9]) -> u8 {
         let mut count: u8 = 0;
         for i in 0..board.len() {
@@ -111,6 +123,9 @@ impl SudokuAvr {
         return count;
     }
 
+    // Copies the solution from one array to the other
+    // SKIPPING original cells
+    // Clone Trait would not have worked 
     fn solve_board(sud: &mut SudokuAvr) {
         for i in 0..sud.board.len() {
             for j in 0..sud.board[i].len() {
@@ -135,7 +150,8 @@ impl SudokuAvr {
         return true;
     }
 
-
+    // Removes Cells based on an RNG 
+    // Skip Cell if original so that board will not loose uniqueness
     fn remove_cells(board: &mut [[Cell; 9]; 9], no_cells: u8) {
         let mut empty = 0;
         let mut limit = 0;
@@ -157,6 +173,7 @@ impl SudokuAvr {
         }
     }
 
+    // Wrapper around print_board() Method that prints the unsolved Board
     pub fn print_unsolved(&self) {
         print!("{}", "Printing Unsolved Board!\nDifficulty: ".green());
         match self.dif {
@@ -169,6 +186,7 @@ impl SudokuAvr {
         SudokuAvr::print_board(&self.board);
     }
 
+    // Wrapper around print_board() Method that prints the unsolved Board
     pub fn print_solved(&self) {
         print!("{}", "Printing Solved Board!\nDifficulty: ".green());
         match self.dif {
@@ -180,6 +198,7 @@ impl SudokuAvr {
         SudokuAvr::print_board(&self.solution);
     }
 
+    // Prints board with correct formatting
     fn print_board(board: &[[Cell; 9]; 9]) {
         println!("\n\t---------------------------");
         for i in 0..board.len() {
@@ -204,6 +223,8 @@ impl SudokuAvr {
         println!("\t🤘| 1 2 3 | 4 5 6 | 7 8 9 |\n");
     }
 
+    // Parses a 81-byte array into a 9x9 Cell array
+    // Marks the original Cells
     fn parse_board(bytes: &[u8]) -> [[Cell; 9]; 9] {
         let mut board: [[Cell; 9]; 9] = Default::default();
         let mut byte = 0;
@@ -219,6 +240,9 @@ impl SudokuAvr {
         return board;
     }
 
+
+    // returns a String representation of the 9x9 Array
+    // 0,0 -> 1st, 0,1 -> 2nd etc
     pub fn to_string(&self) -> String {
         let mut string = String::new();
         for i in 0..self.board.len() {
@@ -226,10 +250,12 @@ impl SudokuAvr {
                 string.push_str(self.board[i][j].value.to_string().as_str());
             }
         }
-        println!("{}", string);
+        // println!("{}", string);
         return string;
     }
 
+    // Wrapper around do_send() Method
+    // Will count the amount of cells to send to the MCU
     pub fn send_board(&self, port: &mut Port) -> Result<()> {
         info!("Will send {} chunks to AVR!", self.filled);
         thread::sleep(Duration::from_millis(50));
@@ -237,6 +263,11 @@ impl SudokuAvr {
         Ok(())
     }
 
+    // Loops over the given board and sends each Cell in the correct format
+    // [N<X><Y><NUM><CR><LF>]: 6 bytes
+    // Skip empty cells
+    // Will flush the buffer and sleep for 50ms
+    // Wait for the correct response from the MCU
     fn do_send(board: &[[Cell; 9]; 9], port: &mut Port) -> Result<()> {
         for i in 0..board.len() {
             for j in 0..board.len() {
@@ -247,7 +278,7 @@ impl SudokuAvr {
                 let chunk = &[b'N', i as u8, j as u8, board[i][j].value, b'\x0D', b'\x0A'];
                 match port.write(chunk) {
                     Ok(_) => {
-                        info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get Uart Name"));
+                        info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get UART Name"));
                         port.flush().expect("Unable to Flush!");
                         thread::sleep(Duration::from_millis(50));
                         wait_response(port, b"OK\x0D\x0A")?;
@@ -263,7 +294,8 @@ impl SudokuAvr {
     }
 }
 
-
+// Given a Directory dir as a string and a number n
+// Generate n Boards of Each Difficulty inside dir
 pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     for diff in Difficulty::iter() {
         for i in 1..=num {
@@ -286,27 +318,20 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
 }
 
 
+// Waits for specified response
+// returns Err if not valid Response
 pub fn wait_response(port: &mut Port, response: &[u8]) -> Result<()> {
     let data = read_uart(port, response.len() as i32)?;
     if response == &*data {
-        info!("OK");
+        // info!("{:?}", data);
         return Ok(());
     } else {
         bail!("Invalid Response");
     }
 }
 
-pub fn wait_response_silent(port: &mut Port, response: &[u8]) -> Result<()> {
-    let data = read_uart(port, response.len() as i32)?;
-    if response == &*data {
-        return Ok(());
-    } else {
-        bail!("");
-    }
-}
-
-
-
+// Writes data argument to UART port
+// Flushes buffer and waits for 50ms before returning
 pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
     info!("Writing {} bytes to {}", data.len(), port.name().expect("Failed to get Uart Name"));
     match port.write(data) {
@@ -319,6 +344,8 @@ pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
 }
 
 
+// Read size bytes from UART
+// if size is < 0 then reads entire buffer
 pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
     let readable_bytes: usize;
 

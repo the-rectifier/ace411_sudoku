@@ -11,12 +11,12 @@ use std::io::{ BufRead, BufReader, stdin, Read, Write };
 use serialport::{ available_ports, DataBits, Parity, StopBits };
 use simplelog::{ ColorChoice, TermLogger, TerminalMode, ConfigBuilder };
 
-
 mod lib;
 
+// Define a new Type for Open Port
 type Port = Box<dyn serialport::SerialPort>;
 
-
+// Define constants replies
 const OK: &[u8] = b"OK\r\n";
 const AT: &[u8] = b"AT\r\n";
 const DONE: &[u8] = b"D\r\n";
@@ -40,57 +40,72 @@ enum MyParity {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "ACE411 - Sudoku <=> AVR Interface",
-    author = "Stavrou Odysseas (canopus)"
+    author = "Stavrou Odysseas (canopus)",
+    version = "0.1",
 )]
 struct Opts {
+    /// Command to run
     #[structopt(subcommand)]
     cmd: Command,
 }
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    /// Lists Available Serial Ports
     #[structopt(name = "list")]
     List,
 
+    /// Run Mode
     #[structopt(name = "run")]
     Run(Run),
 
+    /// Generate Boards
     #[structopt(name = "gen")]
     Gen(Gen),
 
+    /// Download Board to MCU
     #[structopt(name = "prog")]
     Prog(Prog),
 }
 
 #[derive(StructOpt, Debug)]
 struct Gen {
-    #[structopt(long = "directory", short = "p")]
+    /// Directory to place the Boards
+    #[structopt(long = "directory", short = "d")]
     directory: String,
 
+    /// Generate <number> boards for EACH difficulty level
     #[structopt(long = "number", short = "n")]
     number: u32,
 }
 
 #[derive(StructOpt, Debug)]
-struct Prog { 
+struct Prog {
+    /// Device Port 
     #[structopt(long = "dev", short = "u")]
     dev: String,
 
+    /// Stop Bits
     #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
     sb: u8,
 
+    /// Data Bits
     #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
     db: u8,
 
+    /// Parity
     #[structopt(long = "parity", short = "p", default_value = "None")]
     p: MyParity,
 
+    /// Baudrate
     #[structopt(long = "baud-rate", short = "r")]
     br: u32,
 
+    /// Board file to download
     #[structopt(long = "board-file", short = "b")]
     board: String,
 
+    /// Enter Interactive shell
     #[structopt(long = "interactive", short = "i")]
     inter: bool,
 }
@@ -98,21 +113,28 @@ struct Prog {
 
 #[derive(StructOpt, Debug)]
 struct Run {
+    /// Device Port
     #[structopt(long = "dev", short = "u")]
     dev: String,
 
+    /// Difficulty of Game
+    /// [possible values: Easy, Medium, Hard, Ultra]
     #[structopt(long = "difficulty", short = "d")]
     difficulty: lib::Difficulty,
 
+    /// Stop Bits
     #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
     sb: u8,
 
+    /// Data Bits
     #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
     db: u8,
 
+    /// Parity
     #[structopt(long = "parity", short = "p", default_value = "None")]
     p: MyParity,
 
+    /// Baudrate
     #[structopt(long = "baud-rate", short = "r")]
     br: u32,
 
@@ -323,24 +345,24 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
 
         match user_input_vec[0] {
             "at" => {
-                lib::write_uart(port, &AT)?;
-                lib::wait_response(port, &OK)?;
+                lib::write_uart(port, AT)?;
+                lib::wait_response(port, OK)?;
             },
             "clear" => { 
-                lib::write_uart(port, &CLEAR)?; 
-                lib::wait_response(port, &OK)?;
+                lib::write_uart(port, CLEAR)?; 
+                lib::wait_response(port, OK)?;
                 flag_send = false; 
             },
             "break" => {
-                lib::write_uart(port, &BREAK)?;
-                lib::wait_response(port, &OK)?;
+                lib::write_uart(port, BREAK)?;
+                lib::wait_response(port, OK)?;
             },
             "play" => {
                 if !flag_send {
                     error!("No board Downloaded!");
                     continue;
                 }
-                lib::write_uart(port, &PLAY)?;
+                lib::write_uart(port, PLAY)?;
 
                 lib::wait_response(port, OK)?; 
                     
@@ -348,7 +370,7 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                 let time_now = Instant::now();
 
                 loop {
-                    match lib::wait_response_silent(port, &DONE) {
+                    match lib::wait_response(port, DONE) {
                         Ok(_) => break,
                         Err(_) => continue
                     }
@@ -469,7 +491,7 @@ fn print_help() {
     println!("fill");
     println!("debug");
     println!("exit");
-    println!("grab");
+    println!("clear");
     println!("solution");
     println!("unsolved");
     println!("help | '?' ");
