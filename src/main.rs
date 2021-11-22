@@ -364,11 +364,10 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                 }
                 lib::write_uart(port, PLAY)?;
 
-                lib::wait_response(port, OK)?; 
-                    
-
                 let time_now = Instant::now();
-
+                
+                lib::wait_response(port, OK)?; 
+                
                 loop {
                     match lib::wait_response(port, DONE) {
                         Ok(_) => break,
@@ -475,7 +474,7 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
             lib::write_uart(port, &OK)?;
             break;
         }
-        p_board[(data[1] & 0x0F) as usize -1][(data[2] & 0x0F) as usize -1].value = data[3] & 0x0F;
+        p_board[(data[2] & 0x0F) as usize -1][(data[1] & 0x0F) as usize -1].value = data[3] & 0x0F;
         lib::write_uart(port, &T)?;
     }
     

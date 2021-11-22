@@ -18,7 +18,7 @@ type Port = Box<dyn serialport::SerialPort>;
 const EASY: u8 = 35;
 const MEDIUM: u8 = 40;
 const HARD: u8 = 45;
-const ULTRA: u8 = 65;
+const ULTRA: u8 = 81;
 
 // Implement Appropriate Traits for Difficulty Enum
 #[derive(Debug, EnumString, Clone, Display, EnumIter)]
@@ -275,7 +275,7 @@ impl SudokuAvr {
                     continue;
                 }
 
-                let chunk = &[b'N', i as u8, j as u8, board[i][j].value, b'\x0D', b'\x0A'];
+                let chunk = &[b'N', j as u8, i as u8, board[i][j].value, b'\x0D', b'\x0A'];
                 match port.write(chunk) {
                     Ok(_) => {
                         info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get UART Name"));

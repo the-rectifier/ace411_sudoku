@@ -36,7 +36,7 @@ while True:
         alice.write(b"D\r\n")
     elif chunk[0] == ord('N') and chunk[4] == ord('\r') and chunk[5] == ord('\n'):
         print("Got Number")
-        board[chunk[1]][chunk[2]] = chunk[3]
+        board[chunk[2]][chunk[1]] = chunk[3]
         alice.write(OK)
     elif chunk[0] == ord('D') and chunk[3] == ord('\r') and chunk[4] == ord('\n'):
         print("Got Debug")
