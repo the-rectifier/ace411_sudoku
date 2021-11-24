@@ -1,5 +1,6 @@
 use colored::*;
 use std::thread;
+use pad::PadStr;
 use std::fs::File;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -422,7 +423,7 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     continue;
                 }
                 lib::write_uart(port, [b'N', x, y, z, b'\x0D', b'\x0A'].as_ref())?;
-                lib::wait_response(port, b"OK\x0D\x0A")?;
+                lib::wait_response(port, OK)?;
             },
             "debug" => {
                 if user_input_vec.len() > 3 {
@@ -483,15 +484,16 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
 
 
 fn print_help() {
-    println!("{}", "Available Commands: ".yellow());
-    println!("at");
-    println!("download");
-    println!("break");
-    println!("fill");
-    println!("debug");
-    println!("exit");
-    println!("clear");
-    println!("solution");
-    println!("unsolved");
-    println!("help | '?' ");
+    println!("{}", "Available Commands: ".yellow().bold());
+    println!("{}{}", "at".pad_to_width(20), "Attention");
+    println!("{}{}", "clear".pad_to_width(20), "Clear Board");
+    println!("{}{}", "play".pad_to_width(20), "Play Game");
+    println!("{}{}", "fill".pad_to_width(20), "Fill Cell [x y num]");
+    println!("{}{}", "solution".pad_to_width(20), "Print Solution");
+    println!("{}{}", "unsolved".pad_to_width(20), "Print Board");
+    println!("{}{}", "download".pad_to_width(20), "Download Board to AVR");
+    println!("{}{}", "break".pad_to_width(20), "Break");
+    println!("{}{}", "debug".pad_to_width(20), "Return the contents of a Cell [x y num]");
+    println!("{}{}", "exit".pad_to_width(20), "Exit");
+    println!("{}{}", "help or ?".pad_to_width(20), "Print this Help message");
 }
