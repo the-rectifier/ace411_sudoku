@@ -46,7 +46,7 @@ pub struct SudokuAvr {
     dif: Difficulty,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug)]
 pub struct Cell {
     pub value: u8,
     orig: bool,
@@ -175,20 +175,21 @@ impl SudokuAvr {
 
     // Wrapper around print_board() Method that prints the unsolved Board
     pub fn print_unsolved(&self) {
-        print!("{}", "Printing Unsolved Board!\nDifficulty: ".green());
+        print!("{}", "Printing Unsolved Board!\nDifficulty: ".green().bold());
         match self.dif {
             Difficulty::Easy => println!("{}", "EASY".blue()),
             Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
             Difficulty::Hard => println!("{}", "HARD".red()),
             Difficulty::Ultra => println!("{}", "ULTRA".red().bold()),
         }
-
+        print!("{}", "Filled Cells: ".green().bold());
+        println!("{}", format!("{}", self.filled).white().bold());
         SudokuAvr::print_board(&self.board);
     }
 
     // Wrapper around print_board() Method that prints the unsolved Board
     pub fn print_solved(&self) {
-        print!("{}", "Printing Solved Board!\nDifficulty: ".green());
+        print!("{}", "Printing Solved Board!\nDifficulty: ".green().bold());
         match self.dif {
             Difficulty::Easy => println!("{}", "EASY".blue()),
             Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
@@ -200,27 +201,27 @@ impl SudokuAvr {
 
     // Prints board with correct formatting
     fn print_board(board: &[[Cell; 9]; 9]) {
-        println!("\n\t---------------------------");
+        println!("{}", "\n\t---------------------------".bold().white());
         for i in 0..board.len() {
-            print!("\t{} | ", i + 1);
+            print!("{}", format!("\t{} | ", i + 1).white().bold());
             for j in 0..board[i].len() {
                 if board[i][j].value == 0 {
-                    print!("_ ");
+                    print!("{}", "_ ".white().bold());
                 } else {
-                    print!("{} ", board[i][j].value);
+                    print!("{}", format!("{} ", board[i][j].value).white().bold());
                 }
                 if (j + 1) % 3 == 0 && (j + 1) != 9 {
-                    print!("| ");
+                    print!("{}", "| ".white().bold());
                 }
             }
-            print!("|");
+            print!("{}", "|".white().bold());
             if (i + 1) % 3 == 0 && (i + 1) != 9 {
-                print!("\n\t===========================");
+                print!("{}", "\n\t===========================".white().bold());
             }
             println!();
         }
-        println!("\t---------------------------");
-        println!("\t🤘| 1 2 3 | 4 5 6 | 7 8 9 |\n");
+        println!("{}", "\t---------------------------".white().bold());
+        println!("{}", "\t🤘| 1 2 3 | 4 5 6 | 7 8 9 |\n".white().bold());
     }
 
     // Parses a 81-byte array into a 9x9 Cell array
