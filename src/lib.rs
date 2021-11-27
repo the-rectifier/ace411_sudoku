@@ -73,19 +73,22 @@ impl SudokuAvr {
             filled: 0,
         };
 
+        board.filled = SudokuAvr::count_filled(&board.board);
+
+        println!("Filled Before: {}", SudokuAvr::count_filled(&board.board));
         info!("Solving Board");
         SudokuAvr::solve_board(&mut board);
-
+        
         info!("Removing Cells");
-
+        
         match diff {
-            Difficulty::Easy => SudokuAvr::remove_cells(&mut board.board, EASY),
-            Difficulty::Medium => SudokuAvr::remove_cells(&mut board.board, MEDIUM),
-            Difficulty::Hard => SudokuAvr::remove_cells(&mut board.board, HARD),
-            Difficulty::Ultra => SudokuAvr::remove_cells(&mut board.board, ULTRA),
+            Difficulty::Easy => SudokuAvr::remove_cells(&mut board, EASY),
+            Difficulty::Medium => SudokuAvr::remove_cells(&mut board, MEDIUM),
+            Difficulty::Hard => SudokuAvr::remove_cells(&mut board, HARD),
+            Difficulty::Ultra => SudokuAvr::remove_cells(&mut board, ULTRA),
         };
-
-        board.filled = SudokuAvr::count_filled(&board.board);
+        
+        println!("Filled After: {}", SudokuAvr::count_filled(&board.board));
         return board;
     }
 
@@ -96,7 +99,7 @@ impl SudokuAvr {
         info!("Generating Board");
 
         let sudoku = Sudoku::from_str_line(line).expect("Unable to Create board from File");
-        let solution = sudoku.solve_unique().unwrap().to_bytes();
+        let solution = sudoku.solve_unique().expect("Unsolvable Board").to_bytes();
 
         let mut board = SudokuAvr {
             board: SudokuAvr::parse_board(&sudoku.to_bytes()),
@@ -152,25 +155,24 @@ impl SudokuAvr {
 
     // Removes Cells based on an RNG 
     // Skip Cell if original so that board will not loose uniqueness
-    fn remove_cells(board: &mut [[Cell; 9]; 9], no_cells: u8) {
-        let mut empty = 0;
+    fn remove_cells(board: &mut SudokuAvr, no_cells: u8) {
         let mut limit = 0;
         let mut rng = thread_rng();
 
-        while limit < no_cells && !(empty == 81) {
+        while limit < no_cells && limit != 81 - board.filled {
             let i: usize = rng.gen_range(0..9) as usize;
             let j: usize = rng.gen_range(0..9) as usize;
 
-            if board[i][j].orig {
-                empty += 1;
+            if board.board[i][j].orig {
                 continue;
-            } else if board[i][j].value == 0 {
+            } else if board.board[i][j].value == 0 {
                 continue;
             } else {
-                board[i][j].value = 0;
+                board.board[i][j].value = 0;
                 limit += 1;
             }
         }
+        // println!("{:?}", board.board);
     }
 
     // Wrapper around print_board() Method that prints the unsolved Board
