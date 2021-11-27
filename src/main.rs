@@ -485,15 +485,15 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
 
 fn print_help() {
     println!("{}", "Available Commands: ".yellow().bold());
-    println!("{}{}", "at".pad_to_width(20), "Attention");
-    println!("{}{}", "clear".pad_to_width(20), "Clear Board");
-    println!("{}{}", "play".pad_to_width(20), "Play Game");
-    println!("{}{}", "fill".pad_to_width(20), "Fill Cell [x y num]");
-    println!("{}{}", "solution".pad_to_width(20), "Print Solution");
-    println!("{}{}", "unsolved".pad_to_width(20), "Print Board");
-    println!("{}{}", "download".pad_to_width(20), "Download Board to AVR");
-    println!("{}{}", "break".pad_to_width(20), "Break");
-    println!("{}{}", "debug".pad_to_width(20), "Return the contents of a Cell [x y num]");
-    println!("{}{}", "exit".pad_to_width(20), "Exit");
-    println!("{}{}", "help or ?".pad_to_width(20), "Print this Help message");
+    println!("{}{}", "at".pad_to_width(20).white().bold(), "Attention".white().bold());
+    println!("{}{}", "clear".pad_to_width(20).white().bold(), "Clear Board".white().bold());
+    println!("{}{}", "play".pad_to_width(20).white().bold(), "Play Game".white().bold());
+    println!("{}{}", "fill".pad_to_width(20).white().bold(), "Fill Cell [x y num]".white().bold());
+    println!("{}{}", "solution".pad_to_width(20).white().bold(), "Print Solution".white().bold());
+    println!("{}{}", "unsolved".pad_to_width(20).white().bold(), "Print Board".white().bold());
+    println!("{}{}", "download".pad_to_width(20).white().bold(), "Download Board to AVR".white().bold());
+    println!("{}{}", "break".pad_to_width(20).white().bold(), "Break".white().bold());
+    println!("{}{}", "debug".pad_to_width(20).white().bold(), "Return the contents of a Cell [x y num]".white().bold());
+    println!("{}{}", "exit".pad_to_width(20).white().bold(), "Exit".white().bold());
+    println!("{}{}", "help or ?".pad_to_width(20).white().bold(), "Print this Help message".white().bold());
 }
