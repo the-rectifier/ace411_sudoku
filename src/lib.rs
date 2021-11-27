@@ -75,7 +75,7 @@ impl SudokuAvr {
 
         board.filled = SudokuAvr::count_filled(&board.board);
 
-        println!("Filled Before: {}", SudokuAvr::count_filled(&board.board));
+        // println!("Filled Before: {}", SudokuAvr::count_filled(&board.board));
         info!("Solving Board");
         SudokuAvr::solve_board(&mut board);
         
@@ -88,7 +88,7 @@ impl SudokuAvr {
             Difficulty::Ultra => SudokuAvr::remove_cells(&mut board, ULTRA),
         };
         
-        println!("Filled After: {}", SudokuAvr::count_filled(&board.board));
+        // println!("Filled After: {}", SudokuAvr::count_filled(&board.board));
         return board;
     }
 
