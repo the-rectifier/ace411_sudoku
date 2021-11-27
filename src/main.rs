@@ -42,7 +42,7 @@ enum MyParity {
 #[structopt(
     name = "ACE411 - Sudoku <=> AVR Interface",
     author = "Stavrou Odysseas (canopus)",
-    version = "0.1",
+    version = "0.6",
 )]
 struct Opts {
     /// Command to run
