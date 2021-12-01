@@ -278,7 +278,7 @@ impl SudokuAvr {
                     continue;
                 }
 
-                let chunk = &[b'N', j as u8, i as u8, board[i][j].value, b'\x0D', b'\x0A'];
+                let chunk = &[b'N', (j as u8 + 1) + 0x30, (i as u8 + 1) + 0x30, board[i][j].value + 0x30, b'\x0D', b'\x0A'];
                 match port.write(chunk) {
                     Ok(_) => {
                         info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get UART Name"));

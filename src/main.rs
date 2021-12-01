@@ -8,7 +8,7 @@ use std::time::{Instant};
 use log::{ error, info };
 use strum_macros::EnumString;
 use anyhow::{ bail, Context, Result };
-use std::io::{ BufRead, BufReader, stdin, Read, Write };
+use std::io::{ BufRead, BufReader, stdin, Write };
 use serialport::{ available_ports, DataBits, Parity, StopBits };
 use simplelog::{ ColorChoice, TermLogger, TerminalMode, ConfigBuilder };
 
@@ -290,15 +290,13 @@ fn check_parity(parity: MyParity) -> Result<Parity> {
 }
 
 
-fn clear_to_send() -> Result<()> {
-    info!("Ready to send the Unsolved Board to the AVR");
-    info!("Hit Enter when Ready!");
-    let mut character = [0];
+fn ct_msg(msg: &str) -> Result<()> {
+    info!("Hit Enter when Read!");
 
-    while let Err(_) = stdin().read(&mut character) {
-        bail!("Error Reading from Keyboard");
-    }
+    let mut input = String::new();
+    stdin().read_line(&mut input).with_context(|| format!("Unable to Read Line!"))?;
 
+    print!("{}", msg);
     print!("Sending in ");
     for i in (0..=5).rev() {
         print!("{}...", i);
@@ -307,26 +305,6 @@ fn clear_to_send() -> Result<()> {
     }
     println!();
 
-    Ok(())
-}
-
-
-fn clear_to_recv() -> Result<()> {
-    info!("Ready to Receive Board and Check Solution");
-    info!("Hit Enter when Ready!");
-    let mut character = [0];
-
-    while let Err(_) = stdin().read(&mut character) {
-        bail!("Error Reading from Keyboard");
-    }
-
-    print!("Receiving in ");
-    for i in (0..=5).rev() {
-        print!("{}...", i);
-        std::io::stdout().flush()?;
-        thread::sleep(Duration::from_millis(500));
-    }
-    println!();
 
     Ok(())
 }
@@ -376,9 +354,9 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     }
                 }
                 let time_elapsed = time_now.elapsed();
-                
                 info!("{}", format!("Solved in: {:?}", time_elapsed).green().bold());
-                clear_to_recv()?;
+                info!("Ready to Receive the Solved Board from the AVR?");
+                ct_msg("Receiving in ")?;
                 match recv_and_check(port, &sudoku) {
                     Ok(_) => info!("{}", format!("Valid Solution!!").green().bold()),
                     Err(_) => info!("{}", format!("Invalid Solution! :( ").red().bold()),
@@ -390,7 +368,9 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     error!("Game Already Running!");
                     continue;
                 }
-                clear_to_send()?;
+                
+                info!("Ready to Send the Unsolved Board to the AVR?");
+                ct_msg("Sending in ")?;
                 info!("Sending Unsolved board to {:?}", port.name().expect("Couldn't Get Port Name!"));
                 sudoku.send_board(port)?;
                 flag_send = true;
@@ -447,7 +427,7 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     continue;
                 }
 
-                lib::write_uart(port, [b'D', x, y, b'\x0D', b'\x0A'].as_ref())?;
+                lib::write_uart(port, [b'D', x + 0x30, y + 0x30, b'\x0D', b'\x0A'].as_ref())?;
                 let data = lib::read_uart(port, 6)?;
 
                 info!("{}", format!("[{},{}]: {}", data[1] & 0x0F, data[2] & 0x0F, data[3] & 0x0F).yellow().bold());
@@ -471,6 +451,7 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
 
     loop {
         data = lib::read_uart(port, 6)?;
+        // println!("{:?}", data);
         if &data[..3] == DONE {
             lib::write_uart(port, &OK)?;
             break;
