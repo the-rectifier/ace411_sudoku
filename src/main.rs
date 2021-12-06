@@ -9,7 +9,7 @@ use log::{ error, info };
 use strum_macros::EnumString;
 use anyhow::{ bail, Context, Result };
 use std::io::{ BufRead, BufReader, stdin, Write };
-use serialport::{ available_ports, DataBits, Parity, StopBits };
+use serialport::{ available_ports, DataBits, Parity, StopBits, ClearBuffer };
 use simplelog::{ ColorChoice, TermLogger, TerminalMode, ConfigBuilder };
 
 mod lib;
@@ -426,11 +426,10 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     error!("Arguments must be within 1-9");
                     continue;
                 }
-
                 lib::write_uart(port, [b'D', x + 0x30, y + 0x30, b'\x0D', b'\x0A'].as_ref())?;
                 let data = lib::read_uart(port, 6)?;
 
-                info!("{}", format!("[{},{}]: {}", data[1] & 0x0F, data[2] & 0x0F, data[3] & 0x0F).yellow().bold());
+                info!("{}", format!("[{},{}]: {}", data[1] - 0x30, data[2] - 0x30, data[3] - 0x30).yellow().bold());
 
             },
             "solution" => sudoku.print_solved(),
@@ -456,10 +455,13 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
             lib::write_uart(port, &OK)?;
             break;
         }
-        p_board[(data[2] & 0x0F) as usize -1][(data[1] & 0x0F) as usize -1].value = data[3] & 0x0F;
+        p_board[(data[2] - 0x31) as usize][(data[1] - 0x31) as usize].value = data[3] - 0x30;
         lib::write_uart(port, &T)?;
     }
-    
+
+    info!("{}", "Player Board: ".white().bold());
+    lib::SudokuAvr::print_board(&p_board);
+    port.clear(ClearBuffer::All).with_context(|| format!("Unable to Clear Buffers"))?;
     if sudoku.check(&p_board) { return Ok(()); } else { bail!(""); }
 }
 
