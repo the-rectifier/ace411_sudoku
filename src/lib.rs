@@ -369,6 +369,7 @@ pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
             }
         }
     }
+    info!("Bytes Read: {:?}", data);
     Ok(data)
 }
 
