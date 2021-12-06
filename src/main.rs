@@ -402,7 +402,7 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                     error!("Arguments must be within 1-9");
                     continue;
                 }
-                lib::write_uart(port, [b'N', x, y, z, b'\x0D', b'\x0A'].as_ref())?;
+                lib::write_uart(port, [b'N', x + 0x30, y + 0x30, z + 0x30, b'\x0D', b'\x0A'].as_ref())?;
                 lib::wait_response(port, OK)?;
             },
             "debug" => {
