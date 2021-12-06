@@ -202,7 +202,7 @@ impl SudokuAvr {
     }
 
     // Prints board with correct formatting
-    fn print_board(board: &[[Cell; 9]; 9]) {
+    pub fn print_board(board: &[[Cell; 9]; 9]) {
         println!("{}", "\n\t---------------------------".bold().white());
         for i in 0..board.len() {
             print!("{}", format!("\t{} | ", i + 1).white().bold());
@@ -360,7 +360,7 @@ pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
 
     // info!("Reading {} bytes from {}", readable_bytes, port.name().expect("Failed to get Uart Name"));
 
-    let mut data: Vec<u8> = vec![0; readable_bytes as usize];
+    let mut data: Vec<u8> = vec![0 as u8; readable_bytes as usize];
     match port.read(data.as_mut_slice()) {
         Ok(_) => (),
         Err(ref e) => {
