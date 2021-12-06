@@ -456,10 +456,13 @@ fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
             lib::write_uart(port, &OK)?;
             break;
         }
-        p_board[(data[2] & 0x0F) as usize -1][(data[1] & 0x0F) as usize -1].value = data[3] & 0x0F;
+        p_board[(data[2] - 0x31) as usize][(data[1] - 0x31) as usize].value = data[3] - 0x30;
         lib::write_uart(port, &T)?;
     }
-    
+
+    info!("{}", "Player Board: ".white().bold());
+    lib::SudokuAvr::print_board(&p_board);
+    port.clear(ClearBuffer::All).with_context(|| format!("Unable to Clear Buffers"))?;
     if sudoku.check(&p_board) { return Ok(()); } else { bail!(""); }
 }
 
