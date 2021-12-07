@@ -201,7 +201,9 @@ fn main() -> Result<()> {
     )
     .expect("Failed to init logger");
 
-    match Command::from_args() {
+    let opts = Opts::from_args();
+    
+    match opts.cmd {
         Command::List => {
             get_ports();
             return Ok(());
