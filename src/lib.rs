@@ -73,13 +73,12 @@ impl SudokuAvr {
             filled: 0,
         };
 
-        
+        board.filled = SudokuAvr::count_filled(&board.board);
         // println!("Filled Before: {}", SudokuAvr::count_filled(&board.board));
         info!("Solving Board");
         SudokuAvr::solve_board(&mut board);
         
         info!("Removing Cells");
-        
         match diff {
             Difficulty::Easy => SudokuAvr::remove_cells(&mut board, EASY),
             Difficulty::Medium => SudokuAvr::remove_cells(&mut board, MEDIUM),
@@ -88,7 +87,6 @@ impl SudokuAvr {
         };
         
         board.filled = SudokuAvr::count_filled(&board.board);
-        // println!("Filled After: {}", SudokuAvr::count_filled(&board.board));
         return board;
     }
 
@@ -172,7 +170,6 @@ impl SudokuAvr {
                 limit += 1;
             }
         }
-        // println!("{:?}", board.board);
     }
 
     // Wrapper around print_board() Method that prints the unsolved Board
@@ -302,7 +299,7 @@ impl SudokuAvr {
 pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     for diff in Difficulty::iter() {
         for i in 1..=num {
-            let filename = format!("./{}_{}.txt", diff, i);
+            let filename = format!("{}_{}.txt", diff, i);
             let path = PathBuf::from(format!("./{}/", dir)).join(filename);
             
             let sudoku = SudokuAvr::new(&diff);
