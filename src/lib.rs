@@ -294,14 +294,14 @@ impl SudokuAvr {
     }
 }
 
-// Given a Directory dir as a string and a number n
+// Given a Directory dir as a string and a number ns
 // Generate n Boards of Each Difficulty inside dir
 pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     for diff in Difficulty::iter() {
         for i in 1..=num {
-            let filename = format!("{}_{}.txt", diff, i);
+            // let filename = format!("{}_{}.txt", diff, i);
+            let filename = format!("{}_{}_{}.txt", diff, i, Local::now().format("%d%m%Y_%H%M%S"));
             let path = PathBuf::from(format!("./{}/", dir)).join(filename);
-            
             let sudoku = SudokuAvr::new(&diff);
 
             let mut f = OpenOptions::new()
@@ -310,7 +310,7 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
                         .open(&path)
                         .with_context(|| format!("Failed to create {}", path.display()))?;
 
-            write!(f, "{}", sudoku.to_string())?;
+            write!(f, "{}\n{}", sudoku.dif, sudoku.to_string())?;
             info!("Created '{}'", path.display());
         }
     }
