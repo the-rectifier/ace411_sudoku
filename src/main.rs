@@ -257,6 +257,7 @@ fn main() -> Result<()> {
             lib::wait_response(&mut port, OK)?;
 
             sudoku.send_board(&mut port)?;
+            port.clear(ClearBuffer::All).with_context(|| format!("Unable to Clear Buffers"))?;
             if args.inter {
                 info!("Going Interactive!");
                 go_interactive(&mut port, &sudoku, true)?;
