@@ -237,20 +237,27 @@ fn main() -> Result<()> {
             let file = File::open(&args.board)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
-            let vec: Vec<&str> = args.board.split('/').collect();
-            let vec: Vec<&str> = vec[vec.len()-1].split('_').collect();
             let diff: lib::Difficulty;
 
-            match vec[0] {
+            reader.read_line(&mut line)?;
+
+            match line.replace("\n", "").as_str() {
                 "Easy" => diff = lib::Difficulty::Easy,
                 "Medium" => diff = lib::Difficulty::Medium,
                 "Hard" => diff = lib::Difficulty::Hard,
+                "Ultra" => diff = lib::Difficulty::Ultra,
                 _ => bail!("Invalid File Name")
             }
-
+            line.clear();
             reader.read_line(&mut line)?;
-            let sudoku = lib::SudokuAvr::new_from_str(&mut line, diff);
+            let sudoku = lib::SudokuAvr::new_from_str(&line, diff);
+            sudoku.print_solved();
+
+            lib::write_uart(&mut port, CLEAR)?; 
+            lib::wait_response(&mut port, OK)?;
+
             sudoku.send_board(&mut port)?;
+            port.clear(ClearBuffer::All).with_context(|| format!("Unable to Clear Buffers"))?;
             if args.inter {
                 info!("Going Interactive!");
                 go_interactive(&mut port, &sudoku, true)?;
@@ -437,6 +444,7 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
             "solution" => sudoku.print_solved(),
             "unsolved" => sudoku.print_unsolved(),
             "help" | "?" => print_help(),
+            "export" => sudoku.export_board()?,
             _ => error!("Invalid Command!"),
         }
     }
@@ -479,6 +487,7 @@ fn print_help() {
     println!("{}{}", "download".pad_to_width(20).white().bold(), "Download Board to AVR".white().bold());
     println!("{}{}", "break".pad_to_width(20).white().bold(), "Break".white().bold());
     println!("{}{}", "debug".pad_to_width(20).white().bold(), "Return the contents of a Cell [x y num]".white().bold());
+    println!("{}{}", "export".pad_to_width(20).white().bold(), "Export Board".white().bold());
     println!("{}{}", "exit".pad_to_width(20).white().bold(), "Exit".white().bold());
     println!("{}{}", "help or ?".pad_to_width(20).white().bold(), "Print this Help message".white().bold());
 }

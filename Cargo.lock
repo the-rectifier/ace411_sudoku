@@ -28,6 +28,7 @@ name = "ace411_sudoku"
 version = "1.5.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "colored",
  "log",

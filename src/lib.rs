@@ -1,9 +1,10 @@
-use log::info;
+use log::{ info, error };
 use colored::*;
 use std::thread;
 use sudoku::Sudoku;
 use std::time::Duration;
-use std::fs::OpenOptions;
+use chrono::Local;
+use std::fs::{ OpenOptions, create_dir };
 use std::path::{ PathBuf };
 use strum::IntoEnumIterator;
 use rand::{ thread_rng, Rng };
@@ -240,6 +241,34 @@ impl SudokuAvr {
         return board;
     }
 
+    pub fn export_board(&self) -> Result<()> {
+        let dir = "exports";
+        match create_dir(dir) {
+            Ok(_) => (),
+            Err(e) => {
+                match e.kind() { 
+                    ErrorKind::AlreadyExists => (),
+                    _ => {
+                        error!("Unable to Create directory!");
+                        bail!("{}", format!("{:#}", e));
+                    }
+                }
+            } 
+        }
+
+        let filename = format!("{}_{}.txt", self.dif, Local::now().format("%d%m%Y_%H%M%S"));
+        let path = PathBuf::from(format!("./{}", dir)).join(filename.clone());
+
+        let mut f = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&path)
+                    .with_context(|| format!("Failed to create {}", path.display()))?;
+        
+        write!(f, "{}\n{}", self.dif, self.to_string())?;
+        info!("{}", format!("{}: {}", filename, "Exported Successfully"));
+        Ok(())
+    }
 
     // returns a String representation of the 9x9 Array
     // 0,0 -> 1st, 0,1 -> 2nd etc
@@ -294,14 +323,14 @@ impl SudokuAvr {
     }
 }
 
-// Given a Directory dir as a string and a number n
+// Given a Directory dir as a string and a number ns
 // Generate n Boards of Each Difficulty inside dir
 pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     for diff in Difficulty::iter() {
         for i in 1..=num {
-            let filename = format!("{}_{}.txt", diff, i);
+            // let filename = format!("{}_{}.txt", diff, i);
+            let filename = format!("{}_{}_{}.txt", diff, i, Local::now().format("%d%m%Y_%H%M%S"));
             let path = PathBuf::from(format!("./{}/", dir)).join(filename);
-            
             let sudoku = SudokuAvr::new(&diff);
 
             let mut f = OpenOptions::new()
@@ -310,7 +339,7 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
                         .open(&path)
                         .with_context(|| format!("Failed to create {}", path.display()))?;
 
-            write!(f, "{}", sudoku.to_string())?;
+            write!(f, "{}\n{}", sudoku.dif, sudoku.to_string())?;
             info!("Created '{}'", path.display());
         }
     }
