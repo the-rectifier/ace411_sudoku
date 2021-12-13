@@ -331,6 +331,10 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
         stdin().read_line(&mut user_input).with_context(|| format!("Unable to Read Line!"))?;
         let user_input_vec: Vec<&str> = user_input.split_ascii_whitespace().collect(); 
 
+        if user_input_vec.len() == 0 {
+            continue;
+        }
+        
         match user_input_vec[0] {
             "at" => {
                 lib::write_uart(port, AT)?;
