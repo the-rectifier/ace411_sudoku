@@ -20,9 +20,10 @@ The Interface has the following functionality:
 - Download a board to the STK-500
 - Receive Board and check solution
 - Measure Time until receiving "Solve" signal
-- Can Drop you into Interactive Shell suporting a specific Haze Command Set
+- Can Drop you into Interactive Shell suporting a specific Hayes Command Set
 - Cross Platform (Windows / Linux) using the [serialport-rs](https://crates.io/crates/serialport) Crate
   - Variable UART Configurations (Data bits, Stop bits, etc) Provided by the Crate
+- Export Current Board with time to solve
 
 The interface has 4 modes:
 
@@ -31,7 +32,7 @@ The interface has 4 modes:
 - run (Same as above but generates a board at Runtime, drops into interactive shell afterwords)
 - list (List available UART Ports)
 
-The Haze Command Set
+The Hayes Command Set
 
 | Command | From | To | Response | Description |
 |-|-|-|-|-|
@@ -183,7 +184,7 @@ The serialport-rs Crate requires `pkg-config` and `libudev` headers to be instal
 
 - [X] Await Responses Each time a write is issued
 
-- [X] Interactive Shell Conforming to the Haze Command Set
+- [X] Interactive Shell Conforming to the Hayes Command Set
 
 - [X] Replies when Necessary
 

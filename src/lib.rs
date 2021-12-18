@@ -3,7 +3,6 @@ use colored::*;
 use std::thread;
 use sudoku::Sudoku;
 use std::time::Duration;
-use chrono::Local;
 use std::fs::{ OpenOptions, create_dir };
 use std::path::{ PathBuf };
 use strum::IntoEnumIterator;
@@ -45,6 +44,8 @@ pub struct SudokuAvr {
     filled: u8,
 
     dif: Difficulty,
+
+    pub tts: u64,
 }
 
 #[derive(Default, Debug)]
@@ -72,6 +73,7 @@ impl SudokuAvr {
             solution: SudokuAvr::parse_board(&solution),
             dif: diff.clone(),
             filled: 0,
+            tts: 0,
         };
 
         board.filled = SudokuAvr::count_filled(&board.board);
@@ -105,6 +107,7 @@ impl SudokuAvr {
             solution: SudokuAvr::parse_board(&solution),
             dif: diff.clone(),
             filled: 0,
+            tts: 0,
         };
 
         board.filled = SudokuAvr::count_filled(&board.board);
@@ -242,6 +245,10 @@ impl SudokuAvr {
     }
 
     pub fn export_board(&self) -> Result<()> {
+        if self.tts == 0 {
+            error!("No Solution Time Found");
+            return Ok(());
+        }
         let dir = "exports";
         match create_dir(dir) {
             Ok(_) => (),
@@ -256,7 +263,7 @@ impl SudokuAvr {
             } 
         }
 
-        let filename = format!("{}_{}.txt", self.dif, Local::now().format("%d%m%Y_%H%M%S"));
+        let filename = format!("{}_{}s.txt", self.dif, self.tts);
         let path = PathBuf::from(format!("./{}", dir)).join(filename.clone());
 
         let mut f = OpenOptions::new()
@@ -329,7 +336,7 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     for diff in Difficulty::iter() {
         for i in 1..=num {
             // let filename = format!("{}_{}.txt", diff, i);
-            let filename = format!("{}_{}_{}.txt", diff, i, Local::now().format("%d%m%Y_%H%M%S"));
+            let filename = format!("{}_{}.txt", diff, i);
             let path = PathBuf::from(format!("./{}/", dir)).join(filename);
             let sudoku = SudokuAvr::new(&diff);
 

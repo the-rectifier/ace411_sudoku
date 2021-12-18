@@ -42,7 +42,7 @@ enum MyParity {
 #[structopt(
     name = "ACE411 - Sudoku <=> AVR Interface",
     author = "Stavrou Odysseas (canopus)",
-    version = "1.5",
+    version = "1.6",
 )]
 struct Opts {
     /// Command to run
@@ -161,7 +161,7 @@ fn get_ports() {
 }
 
 fn run(dif: lib::Difficulty, port: &mut Port) -> Result<()> {
-    let sudoku = lib::SudokuAvr::new(&dif);
+    let mut sudoku = lib::SudokuAvr::new(&dif);
 
     println!();
     info!("Generated Board!");
@@ -171,7 +171,7 @@ fn run(dif: lib::Difficulty, port: &mut Port) -> Result<()> {
     sudoku.print_solved();
 
     info!("Going Interactive!");
-    go_interactive(port, &sudoku, false)?;
+    go_interactive(port, &mut sudoku, false)?;
 
     Ok(())
 }
@@ -250,7 +250,7 @@ fn main() -> Result<()> {
             }
             line.clear();
             reader.read_line(&mut line)?;
-            let sudoku = lib::SudokuAvr::new_from_str(&line, diff);
+            let mut sudoku = lib::SudokuAvr::new_from_str(&line, diff);
             sudoku.print_solved();
 
             lib::write_uart(&mut port, CLEAR)?; 
@@ -260,7 +260,7 @@ fn main() -> Result<()> {
             port.clear(ClearBuffer::All).with_context(|| format!("Unable to Clear Buffers"))?;
             if args.inter {
                 info!("Going Interactive!");
-                go_interactive(&mut port, &sudoku, true)?;
+                go_interactive(&mut port, &mut sudoku, true)?;
             }
         }
         Command::Gen(gen) => { lib::generate_boards(gen.directory, gen.number)?; }
@@ -319,7 +319,7 @@ fn ct_msg(msg: &str) -> Result<()> {
 }
 
 
-fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Result<()> {
+fn go_interactive(port: &mut Port, sudoku: &mut lib::SudokuAvr, flag: bool) -> Result<()> {
     let mut flag_send = flag;
     let mut user_input = String::new();
     
@@ -371,7 +371,10 @@ fn go_interactive(port: &mut Port, sudoku: &lib::SudokuAvr, flag: bool) -> Resul
                 info!("Ready to Receive the Solved Board from the AVR?");
                 ct_msg("Receiving in ")?;
                 match recv_and_check(port, &sudoku) {
-                    Ok(_) => info!("{}", format!("Valid Solution!!").green().bold()),
+                    Ok(_) => {
+                        info!("{}", format!("Valid Solution!!").green().bold());
+                        sudoku.tts = time_elapsed.as_secs();
+                    },
                     Err(_) => info!("{}", format!("Invalid Solution! :( ").red().bold()),
                 }
             },
