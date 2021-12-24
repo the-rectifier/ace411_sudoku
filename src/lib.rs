@@ -1,15 +1,15 @@
-use log::{ info, error };
-use colored::*;
-use std::thread;
-use sudoku::Sudoku;
-use std::time::Duration;
-use std::fs::{ OpenOptions, create_dir };
-use std::path::{ PathBuf };
-use strum::IntoEnumIterator;
-use rand::{ thread_rng, Rng };
-use std::io::{ Write, ErrorKind };
 use anyhow::{bail, Context, Result};
-use strum_macros::{ EnumString, Display, EnumIter };
+use colored::*;
+use log::{error, info};
+use rand::{thread_rng, Rng};
+use std::fs::{create_dir, OpenOptions};
+use std::io::{ErrorKind, Write};
+use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter, EnumString};
+use sudoku::Sudoku;
 
 // Declare Type for opened Port
 type Port = Box<dyn serialport::SerialPort>;
@@ -54,7 +54,6 @@ pub struct Cell {
     orig: bool,
 }
 
-
 impl SudokuAvr {
     // Constructor for struct Sudoku
     // Takes as argument the level of Difficulty and removes Cells accordingly
@@ -80,7 +79,7 @@ impl SudokuAvr {
         // println!("Filled Before: {}", SudokuAvr::count_filled(&board.board));
         info!("Solving Board");
         SudokuAvr::solve_board(&mut board);
-        
+
         info!("Removing Cells");
         match diff {
             Difficulty::Easy => SudokuAvr::remove_cells(&mut board, EASY),
@@ -88,14 +87,14 @@ impl SudokuAvr {
             Difficulty::Hard => SudokuAvr::remove_cells(&mut board, HARD),
             Difficulty::Ultra => SudokuAvr::remove_cells(&mut board, ULTRA),
         };
-        
+
         board.filled = SudokuAvr::count_filled(&board.board);
         return board;
     }
 
     // Constructor using a string slice as argument
     // Removes Cells depending on Difficulty level
-    // Returns Instantiated Struct 
+    // Returns Instantiated Struct
     pub fn new_from_str(line: &str, diff: Difficulty) -> Self {
         info!("Generating Board");
 
@@ -130,7 +129,7 @@ impl SudokuAvr {
 
     // Copies the solution from one array to the other
     // SKIPPING original cells
-    // Clone Trait would not have worked 
+    // Clone Trait would not have worked
     fn solve_board(sud: &mut SudokuAvr) {
         for i in 0..sud.board.len() {
             for j in 0..sud.board[i].len() {
@@ -143,19 +142,18 @@ impl SudokuAvr {
         }
     }
 
-
     pub fn check(&self, board: &[[Cell; 9]; 9]) -> bool {
         for i in 0..self.solution.len() {
             for j in 0..self.solution[i].len() {
                 if self.solution[i][j].value != board[i][j].value {
                     return false;
                 }
-            } 
+            }
         }
         return true;
     }
 
-    // Removes Cells based on an RNG 
+    // Removes Cells based on an RNG
     // Skip Cell if original so that board will not loose uniqueness
     fn remove_cells(board: &mut SudokuAvr, no_cells: u8) {
         let mut limit = 0;
@@ -178,7 +176,10 @@ impl SudokuAvr {
 
     // Wrapper around print_board() Method that prints the unsolved Board
     pub fn print_unsolved(&self) {
-        print!("{}", "Printing Unsolved Board!\nDifficulty: ".green().bold());
+        print!(
+            "{}",
+            "Printing Unsolved Board!\nDifficulty: ".green().bold()
+        );
         match self.dif {
             Difficulty::Easy => println!("{}", "EASY".blue()),
             Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
@@ -252,26 +253,24 @@ impl SudokuAvr {
         let dir = "exports";
         match create_dir(dir) {
             Ok(_) => (),
-            Err(e) => {
-                match e.kind() { 
-                    ErrorKind::AlreadyExists => (),
-                    _ => {
-                        error!("Unable to Create directory!");
-                        bail!("{}", format!("{:#}", e));
-                    }
+            Err(e) => match e.kind() {
+                ErrorKind::AlreadyExists => (),
+                _ => {
+                    error!("Unable to Create directory!");
+                    bail!("{}", format!("{:#}", e));
                 }
-            } 
+            },
         }
 
         let filename = format!("{}_{}s.txt", self.dif, self.tts);
         let path = PathBuf::from(format!("./{}", dir)).join(filename.clone());
 
         let mut f = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .open(&path)
-                    .with_context(|| format!("Failed to create {}", path.display()))?;
-        
+            .create(true)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("Failed to create {}", path.display()))?;
+
         write!(f, "{}\n{}", self.dif, self.to_string())?;
         info!("{}", format!("{}: {}", filename, "Exported Successfully"));
         Ok(())
@@ -311,10 +310,21 @@ impl SudokuAvr {
                     continue;
                 }
 
-                let chunk = &[b'N', (j as u8 + 1) + 0x30, (i as u8 + 1) + 0x30, board[i][j].value + 0x30, b'\x0D', b'\x0A'];
+                let chunk = &[
+                    b'N',
+                    (j as u8 + 1) + 0x30,
+                    (i as u8 + 1) + 0x30,
+                    board[i][j].value + 0x30,
+                    b'\x0D',
+                    b'\x0A',
+                ];
                 match port.write(chunk) {
                     Ok(_) => {
-                        info!("Wrote {:?} to {:?}", chunk, port.name().expect("Failed to get UART Name"));
+                        info!(
+                            "Wrote {:?} to {:?}",
+                            chunk,
+                            port.name().expect("Failed to get UART Name")
+                        );
                         port.flush().expect("Unable to Flush!");
                         thread::sleep(Duration::from_millis(50));
                         wait_response(port, b"OK\x0D\x0A")?;
@@ -341,10 +351,10 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
             let sudoku = SudokuAvr::new(&diff);
 
             let mut f = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .open(&path)
-                        .with_context(|| format!("Failed to create {}", path.display()))?;
+                .create(true)
+                .write(true)
+                .open(&path)
+                .with_context(|| format!("Failed to create {}", path.display()))?;
 
             write!(f, "{}\n{}", sudoku.dif, sudoku.to_string())?;
             info!("Created '{}'", path.display());
@@ -352,7 +362,6 @@ pub fn generate_boards(dir: String, num: u32) -> Result<()> {
     }
     Ok(())
 }
-
 
 // Waits for specified response
 // returns Err if not valid Response
@@ -369,16 +378,23 @@ pub fn wait_response(port: &mut Port, response: &[u8]) -> Result<()> {
 // Writes data argument to UART port
 // Flushes buffer and waits for 50ms before returning
 pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
-    info!("Writing {} bytes to {}", data.len(), port.name().expect("Failed to get Uart Name"));
+    info!(
+        "Writing {} bytes to {}",
+        data.len(),
+        port.name().expect("Failed to get Uart Name")
+    );
     match port.write(data) {
-        Ok(len) => { info!("Wrote {} bytes!", len); }
-        Err(_) => { bail!("Unable to Write to Uart"); }
+        Ok(len) => {
+            info!("Wrote {} bytes!", len);
+        }
+        Err(_) => {
+            bail!("Unable to Write to Uart");
+        }
     }
     port.flush()?;
     thread::sleep(Duration::from_millis(50));
     Ok(())
 }
-
 
 // Read size bytes from UART
 // if size is < 0 then reads entire buffer
@@ -405,4 +421,3 @@ pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
     info!("Bytes Read: {:?}", data);
     Ok(data)
 }
-
