@@ -161,6 +161,8 @@ Or you can [Build](#Build) it yourself.
 Building is only supported in Linux due to required packages by the [serialport-rs](https://crates.io/crates/serialport) Crate (See [Dependencies](#Dependencies))
 
 - Install [Rust](https://www.rust-lang.org/learn/get-started) using rustup
+- Install cargo make:
+  - `$ cargo install cargo-make`
 - Add windows target:
   - `$ rustup target add x86_64-pc-windows-gnu`
 - Clone this repo
