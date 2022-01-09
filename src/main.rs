@@ -14,8 +14,7 @@ use strum_macros::EnumString;
 
 mod lib;
 
-use crate::lib::SudokuAvr;
-use crate::lib::{generate_boards, read_uart, wait_response, write_uart};
+use crate::lib::*;
 
 // Define a new Type for Open Port
 type Port = Box<dyn serialport::SerialPort>;
@@ -50,6 +49,10 @@ struct Opts {
     /// Command to run
     #[structopt(subcommand)]
     cmd: Command,
+
+    /// Verbosity level
+    #[structopt(name = "verbosity", long = "verbose", short = "v")]
+    verbosity: bool,
 }
 
 #[derive(StructOpt, Debug)]
@@ -69,6 +72,41 @@ enum Command {
     /// Download Board to MCU
     #[structopt(name = "prog")]
     Prog(Prog),
+
+    /// Download Board to MCU
+    #[structopt(name = "tour")]
+    Tour(Tournament),
+}
+
+#[derive(StructOpt, Debug)]
+struct Tournament {
+    /// Directory to place the Boards
+    #[structopt(long = "directory", short = "d")]
+    directory: String,
+
+    /// Device Port
+    #[structopt(long = "dev", short = "u")]
+    dev: String,
+
+    /// Stop Bits
+    #[structopt(long="stop-bits", default_value="1", possible_values(&["1", "2"]))]
+    sb: u8,
+
+    /// Data Bits
+    #[structopt(long="data-bits", default_value="8", possible_values(&["5", "6", "7", "8"]))]
+    db: u8,
+
+    /// Parity
+    #[structopt(long = "parity", short = "p", default_value = "None")]
+    p: MyParity,
+
+    /// Baudrate
+    #[structopt(long = "baud-rate", short = "r")]
+    br: u32,
+
+    /// Team
+    #[structopt(long = "team", short = "t")]
+    team: String,
 }
 
 #[derive(StructOpt, Debug)]
@@ -154,21 +192,31 @@ struct PortConfig {
 fn get_ports() {
     let ports = available_ports().expect("No ports found!");
     for (i, p) in ports.iter().enumerate() {
-        info!("Found Port ({}): {}", i, p.port_name);
+        println!(
+            "{}",
+            format!(
+                "{} {}{}{} {} {}",
+                format!("{}.)", i.to_string()).white().bold(),
+                "[".white().bold(),
+                "*".green().bold(),
+                "]".white().bold(),
+                "Found Port: ".white().bold(),
+                p.port_name.white().bold()
+            )
+        );
     }
 }
 
 fn run(dif: lib::Difficulty, port: &mut Port) -> Result<()> {
     let mut sudoku = lib::SudokuAvr::new(&dif);
 
-    println!();
-    info!("Generated Board!");
+    println!("\n{}", "Generated Board!".white().bold());
     sudoku.print_unsolved();
 
-    info!("Generated Solution!");
+    println!("{}", "Generated Solution!".white().bold());
     sudoku.print_solved();
 
-    info!("Going Interactive!");
+    println!("{}", "Going Interactive".white().bold());
     go_interactive(port, &mut sudoku, false)?;
 
     Ok(())
@@ -191,20 +239,36 @@ fn open_port(port_config: &PortConfig) -> Result<Port> {
 }
 
 fn main() -> Result<()> {
+    let opts = Opts::from_args();
+
+    let log_level = match opts.verbosity {
+        false => log::LevelFilter::Info,
+        true => log::LevelFilter::Debug,
+    };
+
     TermLogger::init(
-        log::LevelFilter::Info,
+        log_level,
         ConfigBuilder::new().set_time_to_local(true).build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )
     .expect("Failed to init logger");
 
-    let opts = Opts::from_args();
-
     match opts.cmd {
         Command::List => {
             get_ports();
             return Ok(());
+        }
+        Command::Tour(args) => {
+            let port_config = PortConfig {
+                baud_rate: args.br,
+                stop_bits: check_stop_bits(args.sb)?,
+                data_bits: check_data_bits(args.db)?,
+                parity: check_parity(args.p)?,
+                dev: args.dev,
+            };
+            let mut port = open_port(&port_config)?;
+            lib::play_tournament(&args.directory, &args.team, &mut port)?;
         }
         Command::Run(args) => {
             let port_config = PortConfig {
@@ -258,7 +322,7 @@ fn main() -> Result<()> {
             port.clear(ClearBuffer::All)
                 .with_context(|| format!("Unable to Clear Buffers"))?;
             if args.inter {
-                info!("Going Interactive!");
+                println!("{}", "Going Interactive".white().bold());
                 go_interactive(&mut port, &mut sudoku, true)?;
             }
         }
@@ -321,7 +385,7 @@ fn go_interactive(port: &mut Port, sudoku: &mut lib::SudokuAvr, flag: bool) -> R
     let mut user_input = String::new();
 
     loop {
-        print!("{}", "> ".green().bold());
+        print!("{}", "🤘> ".green().bold());
         std::io::stdout().flush().expect("Couldn't Flush STDOUT");
 
         user_input.clear();
@@ -372,8 +436,8 @@ fn go_interactive(port: &mut Port, sudoku: &mut lib::SudokuAvr, flag: bool) -> R
                 );
                 info!("Ready to Receive the Solved Board from the AVR?");
                 ct_msg("Receiving in ")?;
-                match recv_and_check(port, &sudoku) {
-                    Ok(_) => {
+                match lib::recv_and_check(port, &sudoku) {
+                    Ok(()) => {
                         info!("{}", format!("Valid Solution!!").green().bold());
                         sudoku.tts = time_elapsed.as_secs();
                     }
@@ -488,34 +552,6 @@ fn go_interactive(port: &mut Port, sudoku: &mut lib::SudokuAvr, flag: bool) -> R
         }
     }
     Ok(())
-}
-
-fn recv_and_check(port: &mut Port, sudoku: &lib::SudokuAvr) -> Result<()> {
-    let mut p_board: [[lib::Cell; 9]; 9] = Default::default();
-
-    write_uart(port, &SAVE)?;
-    let mut data: Vec<u8>;
-
-    loop {
-        data = read_uart(port, 6)?;
-        // println!("{:?}", data);
-        if &data[..3] == DONE {
-            write_uart(port, &OK)?;
-            break;
-        }
-        p_board[(data[2] - 0x31) as usize][(data[1] - 0x31) as usize].value = data[3] - 0x30;
-        write_uart(port, &T)?;
-    }
-
-    info!("{}", "Player Board: ".white().bold());
-    SudokuAvr::print_board(&p_board);
-    port.clear(ClearBuffer::All)
-        .with_context(|| format!("Unable to Clear Buffers"))?;
-    if sudoku.check(&p_board) {
-        return Ok(());
-    } else {
-        bail!("");
-    }
 }
 
 fn print_help() {

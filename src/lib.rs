@@ -1,12 +1,13 @@
 use anyhow::{bail, Context, Result};
 use colored::*;
-use log::{error, info};
+use log::{debug, error, info};
 use rand::{thread_rng, Rng};
-use std::fs::{create_dir, OpenOptions};
-use std::io::{ErrorKind, Write};
+use serialport::ClearBuffer;
+use std::fs::{self, create_dir, File, OpenOptions};
+use std::io::{stdin, BufRead, BufReader, ErrorKind, Write};
 use std::path::PathBuf;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 use sudoku::Sudoku;
@@ -20,8 +21,18 @@ const MEDIUM: u8 = 40;
 const HARD: u8 = 45;
 const ULTRA: u8 = 81;
 
+// Define constants replies
+const OK: &[u8] = b"OK\r\n";
+const AT: &[u8] = b"AT\r\n";
+const DONE: &[u8] = b"D\r\n";
+const CLEAR: &[u8] = b"C\r\n";
+const T: &[u8] = b"T\r\n";
+const BREAK: &[u8] = b"B\r\n";
+const PLAY: &[u8] = b"P\r\n";
+const SAVE: &[u8] = b"S\r\n";
+
 // Implement Appropriate Traits for Difficulty Enum
-#[derive(Debug, EnumString, Clone, Display, EnumIter)]
+#[derive(Debug, EnumString, Clone, Display, EnumIter, PartialEq, Eq, Ord, PartialOrd)]
 pub enum Difficulty {
     #[strum(ascii_case_insensitive)]
     Easy,
@@ -34,21 +45,18 @@ pub enum Difficulty {
 }
 
 // Define Structs
-// #[derive(Default)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct SudokuAvr {
+    dif: Difficulty,
     /* Hold the generated board */
     board: [[Cell; 9]; 9],
     /* Holds the whole solved board */
     solution: [[Cell; 9]; 9],
-
     filled: u8,
-
-    dif: Difficulty,
-
     pub tts: u64,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Cell {
     pub value: u8,
     orig: bool,
@@ -89,7 +97,7 @@ impl SudokuAvr {
         };
 
         board.filled = SudokuAvr::count_filled(&board.board);
-        return board;
+        board
     }
 
     // Constructor using a string slice as argument
@@ -111,7 +119,7 @@ impl SudokuAvr {
 
         board.filled = SudokuAvr::count_filled(&board.board);
 
-        return board;
+        board
     }
 
     // Counts filled cells
@@ -124,7 +132,7 @@ impl SudokuAvr {
                 }
             }
         }
-        return count;
+        count
     }
 
     // Copies the solution from one array to the other
@@ -150,7 +158,7 @@ impl SudokuAvr {
                 }
             }
         }
-        return true;
+        true
     }
 
     // Removes Cells based on an RNG
@@ -181,9 +189,9 @@ impl SudokuAvr {
             "Printing Unsolved Board!\nDifficulty: ".green().bold()
         );
         match self.dif {
-            Difficulty::Easy => println!("{}", "EASY".blue()),
-            Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
-            Difficulty::Hard => println!("{}", "HARD".red()),
+            Difficulty::Easy => println!("{}", "EASY".blue().bold()),
+            Difficulty::Medium => println!("{}", "MEDIUM".yellow().bold()),
+            Difficulty::Hard => println!("{}", "HARD".red().bold()),
             Difficulty::Ultra => println!("{}", "ULTRA".red().bold()),
         }
         print!("{}", "Filled Cells: ".green().bold());
@@ -195,9 +203,9 @@ impl SudokuAvr {
     pub fn print_solved(&self) {
         print!("{}", "Printing Solved Board!\nDifficulty: ".green().bold());
         match self.dif {
-            Difficulty::Easy => println!("{}", "EASY".blue()),
-            Difficulty::Medium => println!("{}", "MEDIUM".yellow()),
-            Difficulty::Hard => println!("{}", "HARD".red()),
+            Difficulty::Easy => println!("{}", "EASY".blue().bold()),
+            Difficulty::Medium => println!("{}", "MEDIUM".yellow().bold()),
+            Difficulty::Hard => println!("{}", "HARD".red().bold()),
             Difficulty::Ultra => println!("{}", "ULTRA".red().bold()),
         }
         SudokuAvr::print_board(&self.solution);
@@ -242,7 +250,7 @@ impl SudokuAvr {
             }
         }
 
-        return board;
+        board
     }
 
     pub fn export_board(&self) -> Result<()> {
@@ -286,7 +294,7 @@ impl SudokuAvr {
             }
         }
         // println!("{}", string);
-        return string;
+        string
     }
 
     // Wrapper around do_send() Method
@@ -320,7 +328,7 @@ impl SudokuAvr {
                 ];
                 match port.write(chunk) {
                     Ok(_) => {
-                        info!(
+                        debug!(
                             "Wrote {:?} to {:?}",
                             chunk,
                             port.name().expect("Failed to get UART Name")
@@ -371,14 +379,14 @@ pub fn wait_response(port: &mut Port, response: &[u8]) -> Result<()> {
         // info!("{:?}", data);
         return Ok(());
     } else {
-        bail!("Invalid Response");
+        bail!("Invalid Response {:?}", data);
     }
 }
 
 // Writes data argument to UART port
 // Flushes buffer and waits for 50ms before returning
 pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
-    info!(
+    debug!(
         "Writing {} bytes to {}",
         data.len(),
         port.name().expect("Failed to get Uart Name")
@@ -418,6 +426,166 @@ pub fn read_uart(port: &mut Port, size: i32) -> Result<Vec<u8>> {
             }
         }
     }
-    info!("Bytes Read: {:?}", data);
+    debug!("Bytes Read: {:?}", data);
     Ok(data)
+}
+
+// Traverse Directory and find board files
+// Construct a Vector with the board files and sort it based on Difficulty
+fn prep_boards(dir: &String) -> Result<Vec<SudokuAvr>> {
+    let paths = fs::read_dir(dir).with_context(|| format!("{}{}", "Unable to read", dir))?;
+    let mut boards: Vec<SudokuAvr> = Vec::new();
+
+    for path in paths {
+        let path = path?;
+        if path.path().is_dir() {
+            continue;
+        }
+        let file = File::open(path.path())?;
+        let mut line = String::new();
+        let mut reader = BufReader::new(file);
+        reader.read_line(&mut line)?;
+
+        let diff = match line.replace("\n", "").as_str() {
+            "Easy" => Difficulty::Easy,
+            "Medium" => Difficulty::Medium,
+            "Hard" => Difficulty::Hard,
+            "Ultra" => Difficulty::Ultra,
+            _ => bail!("Invalid Dificulty!"),
+        };
+        line.clear();
+        reader.read_line(&mut line)?;
+        let board = SudokuAvr::new_from_str(&line, diff);
+        boards.push(board);
+    }
+    boards.sort();
+    Ok(boards)
+}
+
+// For a specific team, iterate over all provided boards
+// Play each board and log time and solution to a file
+pub fn play_tournament(dir: &String, team: &String, port: &mut Port) -> Result<()> {
+    let boards = prep_boards(dir)?;
+
+    let dir = "tournament";
+    match create_dir(dir) {
+        Ok(_) => (),
+        Err(e) => match e.kind() {
+            ErrorKind::AlreadyExists => (),
+            _ => {
+                error!("Unable to Create directory!");
+                bail!("{}", format!("{:#}", e));
+            }
+        },
+    }
+
+    let filename = format!("team_{}.txt", team);
+    let path = PathBuf::from(format!("./{}", dir)).join(filename.clone());
+
+    let mut f = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("Failed to create {}", path.display()))?;
+
+    write!(f, "Team: {}\n", team)?;
+    for (i, board) in boards.iter().enumerate() {
+        // Check if Board is Live
+        // send at
+        write_uart(port, AT)?;
+        // wait for ok
+        wait_response(port, OK)?;
+        // send clear
+        write_uart(port, CLEAR)?;
+        // wait for ok
+        wait_response(port, OK)?;
+        // send board
+        board.send_board(port)?;
+        // clear buffers
+        port.clear(ClearBuffer::All)
+            .with_context(|| format!("Unable to Clear Buffers"))?;
+
+        info!("{}", format!("Playing Board: {}", i).white().bold());
+        write_uart(port, PLAY)?;
+
+        let time_now = Instant::now();
+
+        wait_response(port, OK)?;
+
+        // Wait until solution
+        loop {
+            match wait_response(port, DONE) {
+                Ok(()) => break,
+                Err(_) => continue,
+            }
+        }
+
+        let time_elapsed = time_now.elapsed();
+        let mut sol = false;
+
+        // log time and solution
+        match recv_and_check(port, board) {
+            Ok(()) => {
+                info!("{}", format!("Valid Solution!!").green().bold());
+                sol = true;
+            }
+            Err(_) => info!("{}", format!("Invalid Solution! :( ").red().bold()),
+        }
+
+        // Clear Buffers
+        port.clear(ClearBuffer::All)
+            .with_context(|| format!("Unable to Clear Buffers"))?;
+
+        // Log solution
+        write!(
+            f,
+            "Board: {}\nDifficulty: {}\nTime to solve: {:?}\n Valid Solution: {}\n",
+            i, board.dif, time_elapsed, sol
+        )?;
+
+        write!(f, "-------------------\n")?;
+        println!(
+            "Board: {} Difficulty: {} Solved in: {:?}",
+            i, board.dif, time_elapsed
+        );
+
+        println!("Press Enter to Send Next Board!");
+        let mut junk = String::new();
+        stdin()
+            .read_line(&mut junk)
+            .with_context(|| format!("Unable to Read Line!"))?;
+        junk.clear();
+    }
+    write!(f, "Finished Playing!")?;
+    info!("{}", format!("Team {} done!", team).white().bold());
+    Ok(())
+}
+
+pub fn recv_and_check(port: &mut Port, sudoku: &SudokuAvr) -> Result<()> {
+    let mut p_board: [[Cell; 9]; 9] = Default::default();
+
+    write_uart(port, &SAVE)?;
+    let mut data: Vec<u8>;
+
+    loop {
+        data = read_uart(port, 6)?;
+        // println!("{:?}", data);
+        debug!("{:?}", data);
+        if &data[..3] == DONE {
+            write_uart(port, &OK)?;
+            break;
+        }
+        p_board[(data[2] - 0x31) as usize][(data[1] - 0x31) as usize].value = data[3] - 0x30;
+        write_uart(port, &T)?;
+    }
+
+    info!("{}", "Player Board: ".white().bold());
+    SudokuAvr::print_board(&p_board);
+    port.clear(ClearBuffer::All)
+        .with_context(|| format!("Unable to Clear Buffers"))?;
+
+    match sudoku.check(&p_board) {
+        true => Ok(()),
+        false => bail!(""),
+    }
 }
