@@ -24,10 +24,8 @@ const OK: &[u8] = b"OK\r\n";
 const AT: &[u8] = b"AT\r\n";
 const DONE: &[u8] = b"D\r\n";
 const CLEAR: &[u8] = b"C\r\n";
-const T: &[u8] = b"T\r\n";
 const BREAK: &[u8] = b"B\r\n";
 const PLAY: &[u8] = b"P\r\n";
-const SAVE: &[u8] = b"S\r\n";
 
 #[derive(Debug, EnumString)]
 enum MyParity {
@@ -43,7 +41,7 @@ enum MyParity {
 #[structopt(
     name = "ACE411 - Sudoku <=> AVR Interface",
     author = "Stavrou Odysseas (canopus)",
-    version = "1.7"
+    version = "2.0"
 )]
 struct Opts {
     /// Command to run
@@ -191,12 +189,11 @@ struct PortConfig {
 
 fn get_ports() {
     let ports = available_ports().expect("No ports found!");
-    for (i, p) in ports.iter().enumerate() {
+    for p in ports {
         println!(
             "{}",
             format!(
-                "{} {}{}{} {} {}",
-                format!("{}.)", i.to_string()).white().bold(),
+                "{}{}{} {} {}",
                 "[".white().bold(),
                 "*".green().bold(),
                 "]".white().bold(),
@@ -317,7 +314,7 @@ fn main() -> Result<()> {
 
             write_uart(&mut port, CLEAR)?;
             wait_response(&mut port, OK)?;
-
+            info!("{}", "Sending Board!".white().bold());
             sudoku.send_board(&mut port)?;
             port.clear(ClearBuffer::All)
                 .with_context(|| format!("Unable to Clear Buffers"))?;
@@ -361,7 +358,7 @@ fn check_parity(parity: MyParity) -> Result<Parity> {
 }
 
 fn ct_msg(msg: &str) -> Result<()> {
-    info!("Hit Enter when Read!");
+    info!("Hit Enter when Ready!");
 
     let mut input = String::new();
     stdin()
@@ -369,7 +366,6 @@ fn ct_msg(msg: &str) -> Result<()> {
         .with_context(|| format!("Unable to Read Line!"))?;
 
     print!("{}", msg);
-    print!("Sending in ");
     for i in (0..=5).rev() {
         print!("{}...", i);
         std::io::stdout().flush()?;
