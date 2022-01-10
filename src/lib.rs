@@ -72,8 +72,8 @@ pub fn write_uart(port: &mut Port, data: &[u8]) -> Result<()> {
         port.name().expect("Failed to get Uart Name")
     );
     match port.write(data) {
-        Ok(len) => {
-            debug!("Wrote {} bytes!", len);
+        Ok(_) => {
+            debug!("Wrote {} bytes!", str::from_utf8(data)?);
         }
         Err(_) => {
             bail!("Unable to Write to Uart");
