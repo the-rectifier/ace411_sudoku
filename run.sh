@@ -1,4 +1,3 @@
 #!/bin/bash
 
-cargo make sudoku
-rm -rf target
+cargo make sudoku && cargo clean

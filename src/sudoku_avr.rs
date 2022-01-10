@@ -5,6 +5,7 @@ use rand::{thread_rng, Rng};
 use std::fs::{create_dir, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
+use std::str;
 use std::thread;
 use std::time::Duration;
 use strum_macros::{Display, EnumIter, EnumString};
@@ -321,8 +322,8 @@ impl SudokuAvr {
                 match port.write(chunk) {
                     Ok(_) => {
                         debug!(
-                            "Wrote {:?} to {:?}",
-                            chunk,
+                            "Wrote {} to {:?}",
+                            str::from_utf8(chunk)?,
                             port.name().expect("Failed to get UART Name")
                         );
                         port.flush().expect("Unable to Flush!");
