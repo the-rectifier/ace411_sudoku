@@ -29,7 +29,7 @@ The interface has 4 modes:
 
 - gen (Bulk Generate Boards)
 - prog (Program a created board to the STK-500 and optionally drop into interactive shell)
-- run (Same as above but generates a board at Runtime, drops into interactive shell afterwords)
+- run (Same as above but generates a board at Runtime, drops into interactive shell afterwards)
 - list (List available UART Ports)
 
 The Hayes Command Set
